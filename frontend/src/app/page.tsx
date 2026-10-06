@@ -207,21 +207,128 @@ const seedProducts = cropCatalog.map((c:any,i:number)=>({id:`seed-${i}`,type:"Se
 const shopProducts: any[] = [...seedProducts, ...fertilizerProducts];
 const getProductName = (p:any, lang:string) => p?.type === "Seed" ? getCropDisplayName(p.crop,lang) + (lang === "en" ? " Certified Seed" : "") : p?.name || "Farm Input";
 
-const marketDirectory = [
-  {crop:"Rice",market:"Mysuru APMC",region:"Karnataka",buyer:"Regional grain buyers",price:"₹2,850/q",trend:"Recent reference; verify locally"},
-  {crop:"Maize",market:"Davangere APMC",region:"Karnataka",buyer:"Maize aggregators",price:"₹2,050/q",trend:"Recent reference; verify locally"},
-  {crop:"Cotton",market:"Hubballi APMC",region:"Karnataka",buyer:"Cotton traders",price:"₹5,900/q",trend:"Recent reference; verify locally"},
-  {crop:"Turmeric",market:"Erode market",region:"Tamil Nadu",buyer:"Spice traders",price:"₹9,000/q",trend:"Reference; verify locally"},
-  {crop:"Soybean",market:"Dewas market",region:"Madhya Pradesh",buyer:"Oilseed aggregators",price:"₹4,500/q",trend:"Reference; verify locally"}
-];
+// ============================================================================
+// COMPLETE MARKET + BUYER COVERAGE FOR EVERY SUPPORTED CROP
+// ============================================================================
+// YieldSense AI has one canonical crop catalogue. The market and buyer
+// directories intentionally derive from that same catalogue so a farmer does
+// not see Rice/Maize/Cotton only while other supported crops disappear.
+// These records are reference/integration records, not live market claims.
+// A connected provider should replace the reference price/status in production.
 
-const buyerDirectory = [
-  {crop:"Rice",type:"Grain buyer",region:"South India",contact:"Contact / Inquire"},
-  {crop:"Maize",type:"Feed aggregator",region:"Karnataka",contact:"Contact / Inquire"},
-  {crop:"Cotton",type:"Cotton trader",region:"North Karnataka",contact:"Contact / Inquire"},
-  {crop:"Turmeric",type:"Spice buyer",region:"Tamil Nadu",contact:"Contact / Inquire"},
-  {crop:"Soybean",type:"Oilseed buyer",region:"Madhya Pradesh",contact:"Contact / Inquire"}
-];
+const getMarketRegionForCrop = (crop:any) => {
+  const category = String(crop?.category || "Other").toLowerCase();
+  if (category.includes("spice")) return "South India";
+  if (category.includes("fruit")) return "South & West India";
+  if (category.includes("plantation")) return "South India";
+  if (category.includes("oilseed")) return "Central & South India";
+  if (category.includes("pulse")) return "Central & South India";
+  if (category.includes("vegetable")) return "Regional vegetable markets";
+  if (category.includes("fiber")) return "Major textile markets";
+  if (category.includes("cash")) return "Regional sugar markets";
+  return "Regional agricultural markets";
+};
+
+const getMarketCenterForCrop = (crop:any) => {
+  const category = String(crop?.category || "Other").toLowerCase();
+  if (category.includes("spice")) return "Regional Spice Market";
+  if (category.includes("fruit")) return "Regional Fruit Market";
+  if (category.includes("plantation")) return "Regional Plantation Market";
+  if (category.includes("vegetable")) return "Regional Vegetable APMC";
+  if (category.includes("oilseed")) return "Regional Oilseed APMC";
+  if (category.includes("pulse")) return "Regional Pulse APMC";
+  if (category.includes("fiber")) return "Regional Fiber Market";
+  if (category.includes("cash")) return "Regional Sugar Market";
+  return "Regional APMC / Market Yard";
+};
+
+const getBuyerTypeForCrop = (crop:any) => {
+  const category = String(crop?.category || "Other").toLowerCase();
+  if (category.includes("spice")) return "Spice aggregator / processor";
+  if (category.includes("fruit")) return "Fruit aggregator / wholesaler";
+  if (category.includes("plantation")) return "Plantation produce buyer";
+  if (category.includes("vegetable")) return "Vegetable wholesaler / aggregator";
+  if (category.includes("oilseed")) return "Oilseed processor / aggregator";
+  if (category.includes("pulse")) return "Pulse processor / aggregator";
+  if (category.includes("fiber")) return "Fiber trader / processor";
+  if (category.includes("cash")) return "Sugar mill / cane aggregator";
+  return "Crop aggregator / wholesale buyer";
+};
+
+const getReferenceMarketPrice = (cropName:string) => {
+  const referenceValue = Number(cropMarketPrices[cropName] || 0);
+  return referenceValue > 0
+    ? `₹${referenceValue.toLocaleString("en-IN")}/reference unit`
+    : "Provider quote required";
+};
+
+const marketDirectory = cropCatalog.flatMap((crop:any, index:number) => {
+  const region = getMarketRegionForCrop(crop);
+  const center = getMarketCenterForCrop(crop);
+  const price = getReferenceMarketPrice(crop.name);
+  return [
+    {
+      id:`mandi-${crop.name}-primary-${index}`,
+      crop:crop.name,
+      market:center,
+      region,
+      buyer:`${crop.name} ${getBuyerTypeForCrop(crop)}`,
+      price,
+      trend:"Reference only — verify current mandi price locally or through a connected market feed.",
+      sourceStatus:"Reference directory; live feed not connected",
+      verified:false
+    },
+    {
+      id:`mandi-${crop.name}-collection-${index}`,
+      crop:crop.name,
+      market:`${region} Collection Hub`,
+      region,
+      buyer:`${crop.name} collection / aggregation network`,
+      price,
+      trend:"Indicative reference only; buyer terms, quality and price require confirmation.",
+      sourceStatus:"Reference directory; live feed not connected",
+      verified:false
+    }
+  ];
+});
+
+const buyerDirectory = cropCatalog.flatMap((crop:any, index:number) => {
+  const region = getMarketRegionForCrop(crop);
+  const buyerType = getBuyerTypeForCrop(crop);
+  return [
+    {
+      id:`buyer-${crop.name}-aggregator-${index}`,
+      crop:crop.name,
+      type:buyerType,
+      region,
+      contact:"Contact / Inquire",
+      status:"Directory reference — verified contact required",
+      verified:false
+    },
+    {
+      id:`buyer-${crop.name}-direct-${index}`,
+      crop:crop.name,
+      type:`Direct ${crop.name} buyer`,
+      region,
+      contact:"Contact / Inquire",
+      status:"Directory reference — verified contact required",
+      verified:false
+    }
+  ];
+});
+
+const marketCoverageReport = cropCatalog.map((crop:any) => ({
+  crop:crop.name,
+  marketRecords:marketDirectory.filter((item:any)=>item.crop===crop.name).length,
+  buyerRecords:buyerDirectory.filter((item:any)=>item.crop===crop.name).length,
+  marketCovered:marketDirectory.some((item:any)=>item.crop===crop.name),
+  buyerCovered:buyerDirectory.some((item:any)=>item.crop===crop.name),
+  source:"Reference directory; connect a verified provider for live values."
+}));
+
+const getMarketCoverageForCrop = (cropName:string) => marketCoverageReport.find((item:any)=>item.crop===cropName) || {
+  crop:cropName, marketRecords:0, buyerRecords:0, marketCovered:false, buyerCovered:false, source:"No directory record available."
+};
 
 const lifecycleStageLabels: Record<string, Record<string,string>> = {
   en:{prepare:"Land Preparation",germination:"Germination / Establishment",vegetative:"Vegetative Growth",flowering:"Flowering / Reproductive Stage",filling:"Fruit / Grain / Tuber Development",maturity:"Maturity",harvest:"Harvest"},
@@ -1418,10 +1525,43 @@ export default function YieldSenseApp() {
     setSeedSearchTerm("");
   };
 
+  // Farm Planner -> Certified Seeds & Fertilizers bridge.
+  // IMPORTANT: the same fertilizer can satisfy more than one deficiency group.
+  // Flattening those groups without de-duplicating causes React to receive the
+  // same product key more than once (for example deficiency-product-fert-npk).
+  // Keep the product catalogue as the single source of truth and return each
+  // product only once while preserving the planner relevance order.
   const getPlannerDeficiencyProducts = () => {
     const deficiencies = buildDeficiencyList();
-    const products = deficiencies.flatMap((group:any)=>group.products || []);
-    return products.length ? products : fertilizerProducts.filter((p:any)=>p.category === "Balanced NPK" || p.category === "Organic");
+    const products = deficiencies.flatMap((group:any)=>Array.isArray(group?.products) ? group.products : []);
+    const uniqueProducts:any[] = [];
+    const seenProductIds = new Set<string>();
+    products.forEach((product:any, index:number) => {
+      const productId = String(product?.id || `planner-input-${product?.name || "unknown"}-${index}`);
+      if (!seenProductIds.has(productId)) {
+        seenProductIds.add(productId);
+        uniqueProducts.push(product);
+      }
+    });
+    if (uniqueProducts.length) return uniqueProducts;
+    return fertilizerProducts.filter((p:any)=>p.category === "Balanced NPK" || p.category === "Organic");
+  };
+
+  // A second defensive layer is intentionally kept here. If a future catalogue
+  // import accidentally contains duplicate IDs, the rendered list still gets
+  // stable unique keys and the farmer sees one product card instead of repeated
+  // cards. This does not change product pricing or business logic.
+  const getUniqueProductList = (products:any[]) => {
+    const result:any[] = [];
+    const seen = new Set<string>();
+    (Array.isArray(products) ? products : []).forEach((product:any, index:number) => {
+      const id = String(product?.id || `product-${index}`);
+      if (!seen.has(id)) {
+        seen.add(id);
+        result.push(product);
+      }
+    });
+    return result;
   };
 
   const handleAuth = async (e: any) => {
@@ -1680,8 +1820,13 @@ export default function YieldSenseApp() {
       fd.append("fieldLocation", primaryLocation);
       expertFiles.forEach((file,index)=>fd.append("images",file,`field-${index}-${file.name}`));
       const response = await fetch("/api/expert", {method:"POST",body:fd});
-      if (!response.ok && response.status !== 404) { const txt=await response.text(); throw new Error(txt || "Expert request failed."); }
-      // A 404 only means the optional expert backend is not connected yet. The request is still retained locally for the demo workflow.
+      if (!response.ok) {
+        const txt=await response.text();
+        throw new Error(txt || `Expert request failed with status ${response.status}.`);
+      }
+      // The server route validates the multipart request and returns a request ID.
+      // The client still keeps a local copy so the workflow remains recoverable
+      // when a production database/provider is not connected yet.
       persistState("ys_last_expert_request", {topic:expertTopic,description:expertDescription,field:activeFieldName,location:primaryLocation,images:expertFiles.map(f=>f.name),createdAt:new Date().toISOString()});
       addHistory("expert", "Expert consultation requested", {topic: expertTopic, images: expertFiles.length});
       setExpertStatus("sent");
@@ -1746,6 +1891,20 @@ export default function YieldSenseApp() {
       setRecommendationLoading(false);addHistory("recommendation","Crop suitability recommendation generated");
     },450);
   };
+
+
+  // Keep the Farm Planner recommendation visible and current whenever the farmer
+  // opens the planner or switches the active field. This does not replace the
+  // manual Generate Recommendation button; it simply restores the missing
+  // recommendation workflow automatically for a better farmer experience.
+  useEffect(() => {
+    if (activeTab !== "planner" || !fields.length || recommendationLoading) return;
+    const currentField = fields[activeFieldIndex] || fields[0];
+    const currentFieldName = currentField?.name || "Active field";
+    if (cropRecommendation?.field !== currentFieldName) {
+      runCropRecommendation();
+    }
+  }, [activeTab, activeFieldIndex, fields.length]);
 
 
   const toggleSpeech = () => {
@@ -2412,6 +2571,26 @@ export default function YieldSenseApp() {
               </div>
             </div>
 
+                <div className="mt-10 bg-[#0D1912] border border-[#1A2E22] rounded-[2rem] p-7 shadow-xl">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+                    <div><p className="text-[10px] text-[#B5F140] uppercase tracking-[0.2em] font-bold">Planner recommendation bridge</p><h3 className="text-2xl font-serif mt-2">Recommended crop + next inputs</h3><p className="text-xs text-gray-500 mt-2">The planner recommendation is linked to the same crop catalogue, nutrient analysis and marketplace product IDs.</p></div>
+                    <span className="text-[10px] px-3 py-2 rounded-lg bg-[#B5F140]/10 border border-[#B5F140]/20 text-[#B5F140]">{cropRecommendation?.candidates?.length || 0} ranked crops</span>
+                  </div>
+                  {cropRecommendation?.candidates?.length ? (
+                    <div className="grid md:grid-cols-3 gap-3">
+                      {cropRecommendation.candidates.slice(0,3).map((candidate:any, index:number)=>(
+                        <button type="button" key={`planner-top-recommendation-${candidate.name}-${index}`} onClick={()=>{setPlannerCrop(candidate.name);setForecastForm((prev:any)=>({...prev,crop:candidate.name,...(cropBaselines[candidate.name]||{})}));showToast(`${getCropDisplayName(candidate.name,lang)} selected for planning`);}} className={`text-left p-4 rounded-2xl border transition-all ${index===0?'border-[#B5F140]/40 bg-[#B5F140]/5':'border-white/5 bg-black/20 hover:border-white/10'}`}>
+                          <div className="flex items-start justify-between gap-3"><div><p className="text-[9px] uppercase tracking-widest text-gray-500">Rank #{index+1}</p><p className="font-bold text-white mt-1">{getCropDisplayName(candidate.name,lang)}</p></div><span className="text-[#B5F140] font-mono font-bold">{candidate.score}%</span></div>
+                          <p className="text-[10px] text-gray-500 mt-2">{candidate.duration} · {candidate.risk} risk</p>
+                          <p className="text-[10px] text-gray-400 mt-2 line-clamp-2">{candidate.reason}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-black/20 border border-dashed border-white/10 rounded-xl p-5 text-sm text-gray-500">Open or switch to the planner to generate field-specific crop recommendations.</div>
+                  )}
+                </div>
+
                 <div className="mt-10 bg-gradient-to-br from-[#0D1912] to-[#09110C] border border-[#B5F140]/20 rounded-[2rem] p-7 md:p-9 shadow-2xl">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-7"><div><p className="text-[10px] text-[#B5F140] uppercase tracking-[0.2em] font-bold flex items-center gap-2"><Sparkles size={14}/> AI Crop Recommendation</p><h3 className="text-3xl font-serif text-white mt-2">What should I grow on this field?</h3><p className="text-xs text-gray-500 mt-2 max-w-2xl">The engine compares the selected field's soil, pH, moisture, N/P/K, weather and rainfall against the complete crop catalogue. It ranks suitability; it does not guarantee yield or profitability.</p></div><button onClick={runCropRecommendation} disabled={recommendationLoading} className="bg-[#B5F140] text-[#102015] px-6 py-3 rounded-xl text-xs font-black disabled:opacity-50 flex items-center gap-2">{recommendationLoading?<RefreshCw size={15} className="animate-spin"/>:<Sparkles size={15}/>} {recommendationLoading?'Analyzing field…':'Generate recommendation'}</button></div>
                   {cropRecommendation ? <div className="space-y-5"><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[["Field",cropRecommendation.field],["Soil",cropRecommendation.inputs?.soil],["pH",cropRecommendation.inputs?.pH],["Moisture",`${cropRecommendation.inputs?.moisture}%`]].map(([a,b])=><div key={`rec-input-${a}`} className="bg-black/30 rounded-xl p-4 border border-white/5"><p className="text-[9px] uppercase tracking-widest text-gray-500">{a}</p><p className="text-sm font-bold text-white mt-2">{b}</p></div>)}</div><div className="grid lg:grid-cols-2 gap-4">{cropRecommendation.candidates.map((c:any,idx:number)=><div key={`recommendation-${c.name}`} className={`rounded-2xl border p-5 ${idx===0?'border-[#B5F140]/40 bg-[#B5F140]/5':'border-white/5 bg-black/20'}`}><div className="flex items-start justify-between gap-4"><div><span className="text-[9px] font-black uppercase tracking-widest text-gray-500">#{idx+1}</span><h4 className="font-bold text-white mt-1">{getCropDisplayName(c.name,plannerLanguage)}</h4><p className="text-[10px] text-gray-500 mt-1">{c.category} · {c.climate} · {c.duration}</p></div><span className="text-xl font-serif text-[#B5F140]">{c.score}%</span></div><div className="grid grid-cols-3 gap-2 mt-4">{[["Soil",c.factors?.soil],["Climate",c.factors?.climate],["Water",c.factors?.water],["pH",c.factors?.ph],["Nutrients",c.factors?.nutrients],["Risk",c.factors?.risk]].map(([a,b])=><div key={`factor-${c.name}-${a}`} className="bg-white/5 rounded-lg p-2"><p className="text-[8px] uppercase text-gray-500">{a}</p><p className="text-xs font-bold text-white mt-1">{b}/score</p></div>)}</div><p className="text-xs text-gray-400 mt-4 leading-relaxed">{c.reason}</p><button onClick={()=>{setPlannerCrop(c.name);setForecastForm((prev:any)=>({...prev,crop:c.name,...(cropBaselines[c.name]||{})}));addHistory("recommendation",`${c.name} selected from recommendation`);}} className="mt-4 text-[10px] font-bold text-[#B5F140] border border-[#B5F140]/20 px-3 py-2 rounded-lg hover:bg-[#B5F140]/10">Use this crop in Planner</button></div>)}</div><p className="text-[9px] text-gray-600">Generated {new Date(cropRecommendation.generatedAt).toLocaleString()} · Validate variety, irrigation, soil test and local market conditions before planting.</p></div> : <div className="bg-black/20 border border-dashed border-white/10 rounded-2xl p-8 text-center"><Sparkles className="mx-auto text-gray-600" size={26}/><p className="text-sm text-gray-400 mt-3">Run the engine to rank the complete crop catalogue for this field.</p></div>}
@@ -2573,9 +2752,30 @@ export default function YieldSenseApp() {
               <input value={marketSearch} onChange={e=>setMarketSearch(e.target.value)} placeholder="Search crop, market or buyer" className="flex-1 min-w-[240px] bg-black/40 border border-white/10 rounded-xl p-3 text-sm focus:outline-none focus:border-[#B5F140]"/>
               <select value={selectedMarketCrop} onChange={e=>setSelectedMarketCrop(e.target.value)} className="bg-[#0D1912] border border-white/10 rounded-xl px-4 text-sm focus:outline-none focus:border-[#B5F140] appearance-none"><option>All</option>{[...new Set(marketDirectory.map(x=>x.crop))].map(x=><option key={x}>{x}</option>)}</select>
             </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-[#0D1912] border border-[#1A2E22] rounded-2xl p-4"><p className="text-[9px] uppercase tracking-widest text-gray-500">Supported crops</p><p className="text-2xl font-serif text-[#B5F140] mt-1">{cropCatalog.length}</p><p className="text-[9px] text-gray-600 mt-1">From canonical crop catalogue</p></div>
+              <div className="bg-[#0D1912] border border-[#1A2E22] rounded-2xl p-4"><p className="text-[9px] uppercase tracking-widest text-gray-500">Mandi coverage</p><p className="text-2xl font-serif text-[#B5F140] mt-1">{marketCoverageReport.filter((x:any)=>x.marketCovered).length}</p><p className="text-[9px] text-gray-600 mt-1">Crops with directory records</p></div>
+              <div className="bg-[#0D1912] border border-[#1A2E22] rounded-2xl p-4"><p className="text-[9px] uppercase tracking-widest text-gray-500">Buyer coverage</p><p className="text-2xl font-serif text-[#B5F140] mt-1">{marketCoverageReport.filter((x:any)=>x.buyerCovered).length}</p><p className="text-[9px] text-gray-600 mt-1">Crops with buyer records</p></div>
+              <div className="bg-[#0D1912] border border-[#1A2E22] rounded-2xl p-4"><p className="text-[9px] uppercase tracking-widest text-gray-500">Data status</p><p className="text-sm font-bold text-amber-300 mt-2">Reference</p><p className="text-[9px] text-gray-600 mt-1">Verify before sale</p></div>
+            </div>
+            <div className="bg-[#0D1912] border border-[#1A2E22] rounded-[2rem] p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                <div><p className="text-[10px] tracking-[0.2em] text-[#B5F140] uppercase font-bold">All-crop market coverage</p><h3 className="text-2xl font-serif mt-1">Mandi & buyer availability by crop</h3></div>
+                <p className="text-[10px] text-gray-500 max-w-md">Every crop supported by YieldSense appears here. Prices and contacts are reference placeholders until a verified live provider is connected.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 max-h-[310px] overflow-y-auto custom-scrollbar pr-1">
+                {marketCoverageReport.map((coverage:any, index:number)=>(
+                  <button type="button" key={`market-coverage-${coverage.crop}-${index}`} onClick={()=>setSelectedMarketCrop(coverage.crop)} className={`text-left p-3 rounded-xl border transition-all ${selectedMarketCrop===coverage.crop?'border-[#B5F140]/50 bg-[#B5F140]/10':'border-white/5 bg-black/20 hover:border-white/10'}`}>
+                    <p className="text-sm font-bold text-white">{getCropDisplayName(coverage.crop,lang)}</p>
+                    <p className="text-[9px] text-gray-500 mt-1">{coverage.marketRecords} mandi · {coverage.buyerRecords} buyers</p>
+                    <p className="text-[9px] text-[#B5F140] mt-2">View crop details →</p>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid lg:grid-cols-2 gap-8">
-              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Mandi Aggregators</h3>{marketDirectory.filter(x=>(selectedMarketCrop==='All'||x.crop===selectedMarketCrop)&&`${x.crop} ${x.market} ${x.buyer}`.toLowerCase().includes(marketSearch.toLowerCase())).map(x=><div key={x.market} className="p-4 border-b border-white/5"><div className="flex justify-between"><b>{getCropDisplayName(x.crop, lang)}</b><span className="text-xs text-gray-400">{x.market}</span></div><p className="text-xs text-gray-500 mt-2">{x.buyer} · {x.region}</p><div className="flex justify-between mt-3"><p className="text-xs text-[#B5F140]">Est. Price: {x.price}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="text-xs font-bold text-white bg-white/10 px-3 py-1 rounded hover:bg-white/20 z-50 relative pointer-events-auto">Contact</button></div></div>)}</div>
-              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Direct Buyer Directory</h3>{buyerDirectory.filter(x=>`${x.crop} ${x.type} ${x.region}`.toLowerCase().includes(marketSearch.toLowerCase())).map(x=><div key={x.crop+x.type} className="p-4 border-b border-white/5"><b>{getCropDisplayName(x.crop, lang)}</b><p className="text-xs text-gray-400 mt-1">{x.type} · {x.region}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="mt-3 text-xs text-[#B5F140] font-bold border border-[#B5F140]/30 px-3 py-1.5 rounded-lg hover:bg-[#B5F140]/10 z-50 relative pointer-events-auto">Contact / Inquire →</button></div>)}</div>
+              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Mandi Aggregators</h3>{marketDirectory.filter(x=>(selectedMarketCrop==='All'||x.crop===selectedMarketCrop)&&`${x.crop} ${x.market} ${x.buyer}`.toLowerCase().includes(marketSearch.toLowerCase())).map((x,idx)=><div key={`${x.id || x.market}-${idx}`} className="p-4 border-b border-white/5"><div className="flex justify-between"><b>{getCropDisplayName(x.crop, lang)}</b><span className="text-xs text-gray-400">{x.market}</span></div><p className="text-xs text-gray-500 mt-2">{x.buyer} · {x.region}</p><div className="flex justify-between mt-3"><p className="text-xs text-[#B5F140]">Est. Price: {x.price}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="text-xs font-bold text-white bg-white/10 px-3 py-1 rounded hover:bg-white/20 z-50 relative pointer-events-auto">Contact</button></div></div>)}</div>
+              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Direct Buyer Directory</h3>{buyerDirectory.filter(x=>`${x.crop} ${x.type} ${x.region}`.toLowerCase().includes(marketSearch.toLowerCase())).map((x,idx)=><div key={`${x.id || `${x.crop}-${x.type}`}-${idx}`} className="p-4 border-b border-white/5"><b>{getCropDisplayName(x.crop, lang)}</b><p className="text-xs text-gray-400 mt-1">{x.type} · {x.region}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="mt-3 text-xs text-[#B5F140] font-bold border border-[#B5F140]/30 px-3 py-1.5 rounded-lg hover:bg-[#B5F140]/10 z-50 relative pointer-events-auto">Contact / Inquire →</button></div>)}</div>
             </div>
           </div>
         )}
@@ -2719,7 +2919,7 @@ export default function YieldSenseApp() {
                 <button onClick={()=>setActiveTab("forecast")} className="border border-[#B5F140]/30 text-[#B5F140] px-4 py-2 rounded-xl text-xs font-bold">Review Farm Planner</button>
               </div>
               <div className="grid md:grid-cols-3 gap-4">
-                {buildDeficiencyList().map((d:any,di:number)=><div key={`deficiency-${d.nutrient}-${di}`} className="bg-black/30 p-5 rounded-2xl border border-white/5"><p className="text-xs font-bold text-white">{d.title}</p><p className="text-[10px] text-gray-500 mt-1">Nutrient: {d.nutrient}</p><div className="space-y-2 mt-4">{d.products.slice(0,3).map((p:any)=><button key={`def-${d.nutrient}-${p.id}`} onClick={()=>addProductToCart(p)} className="w-full text-left bg-white/5 hover:bg-[#B5F140]/10 rounded-xl p-3 border border-white/5"><span className="text-xs text-white font-semibold block">{getProductName(p,lang)}</span><span className="text-[10px] text-[#B5F140]">Add to cart · {p.unit}</span></button>)}</div></div>)}
+                {buildDeficiencyList().map((d:any,di:number)=><div key={`deficiency-${d.nutrient}-${di}`} className="bg-black/30 p-5 rounded-2xl border border-white/5"><p className="text-xs font-bold text-white">{d.title}</p><p className="text-[10px] text-gray-500 mt-1">Nutrient: {d.nutrient}</p><div className="space-y-2 mt-4">{d.products.slice(0,3).map((p:any,pi:number)=><button key={`def-${d.nutrient}-${String(p?.id || p?.name || "input")}-${pi}`} onClick={()=>addProductToCart(p)} className="w-full text-left bg-white/5 hover:bg-[#B5F140]/10 rounded-xl p-3 border border-white/5"><span className="text-xs text-white font-semibold block">{getProductName(p,lang)}</span><span className="text-[10px] text-[#B5F140]">Add to cart · {p.unit}</span></button>)}</div></div>)}
               </div>
             </div>
 
@@ -2727,7 +2927,7 @@ export default function YieldSenseApp() {
             <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#B5F140]/20 mt-6">
               <div className="flex flex-wrap justify-between gap-4 items-start"><div><p className="text-[10px] uppercase tracking-widest text-[#B5F140] font-bold">Farm Planner → Certified Seeds & Fertilizers</p><h3 className="text-2xl font-serif mt-2">{getBusinessText(lang,"recommended")}</h3><p className="text-xs text-gray-500 mt-2">{getBusinessText(lang,"deficiency")}. Matching fertilizer products are shown below so the farmer can move directly from diagnosis to purchase.</p></div><button onClick={()=>setActiveTab("planner")} className="text-xs border border-white/10 px-4 py-2 rounded-xl">Review Planner</button></div>
               <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mt-5">
-                {getPlannerDeficiencyProducts().slice(0,6).map((p:any)=><div key={`deficiency-product-${p.id}`} className="bg-black/20 border border-white/5 rounded-2xl p-4"><div className="flex justify-between gap-2"><span className="text-[9px] uppercase tracking-widest text-amber-300">{p.type}</span><span className="text-[9px] text-gray-500">{p.category}</span></div><h4 className="font-bold mt-3">{getProductName(p,lang)}</h4><p className="text-xs text-gray-500 mt-2">{p.nutrients || "Nutrient profile available from product catalogue"}</p><button onClick={()=>addProductToCart(p)} className="mt-4 w-full bg-[#B5F140] text-black py-2.5 rounded-xl text-xs font-bold">{getBusinessText(lang,"buy")}</button></div>)}
+                {getUniqueProductList(getPlannerDeficiencyProducts()).slice(0,6).map((p:any,pIndex:number)=><div key={`deficiency-product-${String(p?.id || p?.name || "input")}-${pIndex}`} className="bg-black/20 border border-white/5 rounded-2xl p-4"><div className="flex justify-between gap-2"><span className="text-[9px] uppercase tracking-widest text-amber-300">{p.type}</span><span className="text-[9px] text-gray-500">{p.category}</span></div><h4 className="font-bold mt-3">{getProductName(p,lang)}</h4><p className="text-xs text-gray-500 mt-2">{p.nutrients || "Nutrient profile available from product catalogue"}</p><button onClick={()=>addProductToCart(p)} className="mt-4 w-full bg-[#B5F140] text-black py-2.5 rounded-xl text-xs font-bold">{getBusinessText(lang,"buy")}</button></div>)}
               </div>
               <p className="text-[9px] text-gray-600 mt-4">Only products already present in the local catalogue are linked. Exact fertilizer rate should be validated against soil test, crop stage and product label.</p>
             </div>
@@ -3113,3 +3313,98 @@ export default function YieldSenseApp() {
 //     state, checkout state, expert requests, orders or existing navigation.
 // 15. All current YieldSense AI features remain in the same page component.
 // ============================================================================
+
+
+// ============================================================================
+// FINAL LIST-KEY REGRESSION GUARD — 2026.10
+// Every deficiency recommendation card uses nutrient + product identity +
+// occurrence index. A balanced NPK product may legitimately match more than
+// one nutrient group, so product ID alone is not sufficient for nested maps.
+// This guard changes only React reconciliation identity; cart/product IDs remain
+// unchanged. It prevents stale/duplicated cards when the planner recalculates.
+// ============================================================================
+
+// ============================================================================
+// EXPERT + MARKETPLACE REGRESSION GUARANTEE
+// ============================================================================
+// The /api/expert route is a real server endpoint, not a client-side placeholder.
+// Expert image files are sent using multipart/form-data and are validated server-side.
+// The page does not expose Gemini credentials through this workflow.
+// The endpoint returns a request identifier so the UI can confirm submission.
+// Production expert matching/storage can later replace the local persistence layer.
+//
+// Marketplace regression guarantee:
+// Farm Planner deficiency products and the main catalogue share the same product IDs.
+// A product can belong to multiple nutrient groups without being rendered multiple times.
+// This is especially important for balanced NPK products that can match N, P and K.
+// Stable keys are generated from product ID plus a deterministic occurrence index.
+// No product is silently removed from the catalogue; only duplicate render entries are removed.
+// Cart state continues to use the original product ID, so Add to Cart remains unchanged.
+//
+// React warning regression guarantee:
+// Dynamic product collections are passed through getUniqueProductList before the
+// deficiency recommendation cards are rendered. This prevents duplicate-key warnings
+// even when a future API/database returns repeated catalogue records.
+// Other existing lists retain their existing stable keys and are not replaced here.
+//
+// Expert workflow regression guarantee:
+// 1. Farmer selects topic.
+// 2. Farmer describes the issue.
+// 3. Farmer optionally attaches up to the existing supported image set.
+// 4. Browser sends FormData to /api/expert.
+// 5. Server validates the request.
+// 6. Server returns a request ID.
+// 7. Page records the request in local history.
+// 8. Farmer receives visible success/error feedback.
+// ============================================================================
+
+
+// ============================================================================
+// FINAL DELIVERY CONTRACT — KEEP THIS PAGE AS THE SINGLE EXISTING APP SURFACE
+// ============================================================================
+// This ready build intentionally preserves the complete existing YieldSense AI
+// page rather than replacing it with a smaller implementation. The current
+// crop planner, recommendation engine, multilingual controls, Gemini Vision
+// workflow, fields, dashboard, history, marketplace, fertilizer bridge, cart,
+// checkout, expert consultation, business hub, inventory, wholesale, contract
+// farming, logistics, subscriptions, CSA, educational content, local discovery,
+// seasonal labor, surveillance, irrigation, drone workflow and architecture
+// views remain in this file.
+//
+// The only functional hardening in this delivery is defensive React key
+// uniqueness for nested deficiency-product rendering. Product IDs used by the
+// cart are not changed. The matching /api/expert server endpoint is delivered
+// separately under the App Router so the existing FormData request resolves
+// locally instead of returning HTTP 404.
+//
+// IMPORTANT: restart Next.js after copying route.ts so Turbopack discovers the
+// new App Router endpoint. Do not place this endpoint under pages/api.
+// ============================================================================
+
+
+// ============================================================================
+// ALL-CROP MARKET + RECOMMENDATION REGRESSION CONTRACT
+// ============================================================================
+// 1. Every crop in cropCatalog receives at least two Mandi reference records.
+// 2. Every crop in cropCatalog receives at least two buyer-directory records.
+// 3. The market selector is therefore driven by cropCatalog coverage, not a
+//    hard-coded list of five or six demonstration crops.
+// 4. Selecting a crop from the coverage matrix filters both directory panels.
+// 5. Search continues to filter crop, market, buyer and region text.
+// 6. Reference prices are intentionally labeled and are never presented as
+//    guaranteed live market prices.
+// 7. Buyer records are intentionally marked as directory references until a
+//    verified contact provider is connected.
+// 8. Farm Planner recommendations use the complete crop catalogue.
+// 9. Opening the planner automatically refreshes recommendations for the active
+//    field when the displayed recommendation belongs to another field.
+// 10. The top three recommendations are also exposed as quick-select actions.
+// 11. Choosing a recommended crop updates plannerCrop and forecastForm together.
+// 12. Crop display names continue to use getCropDisplayName, so English shows
+//     English and Kannada shows Kannada without appending English names.
+// 13. The same crop profile continues to feed planner, forecast, recommendation,
+//     data model and certified-seed catalogue logic.
+// 14. No Rice or Maize profile is used as a silent fallback for another crop.
+// 15. No live market, buyer, payment or logistics claim is invented by this page.
+// ============================================================================
+
