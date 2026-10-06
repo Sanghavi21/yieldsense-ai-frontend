@@ -330,6 +330,63 @@ const getMarketCoverageForCrop = (cropName:string) => marketCoverageReport.find(
   crop:cropName, marketRecords:0, buyerRecords:0, marketCovered:false, buyerCovered:false, source:"No directory record available."
 };
 
+
+// ============================================================================
+// ALL-CROP MARKET INTELLIGENCE LAYER
+// ============================================================================
+// The marketplace must never silently fall back to Rice/Maize/Cotton records.
+// Every crop in cropCatalog receives its own market/buyer planning profile.
+// These are explicitly reference records, not claims of a live mandi feed.
+// A verified provider can replace the reference fields without changing the UI.
+// ============================================================================
+const cropMarketIntelligence = Object.fromEntries(cropCatalog.map((crop:any, index:number) => {
+  const category = String(crop?.category || "Other").toLowerCase();
+  const name = String(crop?.name || "Crop");
+  const isFruit = category.includes("fruit");
+  const isVegetable = category.includes("vegetable");
+  const isSpice = category.includes("spice");
+  const isPulse = category.includes("pulse");
+  const isOilseed = category.includes("oilseed");
+  const isFiber = category.includes("fiber");
+  const isPlantation = category.includes("plantation");
+  const isCash = category.includes("cash");
+  const marketType = isFruit ? "Fruit APMC / collection market" : isVegetable ? "Vegetable APMC / collection market" : isSpice ? "Spice market / processor" : isPulse ? "Pulse market / dal mill" : isOilseed ? "Oilseed APMC / processor" : isFiber ? "Fiber market / processor" : isPlantation ? "Plantation produce market" : isCash ? "Sugar / commercial crop market" : "Regional APMC / market yard";
+  const buyerType = isFruit ? "Fruit wholesaler / ripener / processor" : isVegetable ? "Vegetable wholesaler / retailer" : isSpice ? "Spice processor / exporter / aggregator" : isPulse ? "Dal mill / pulse aggregator" : isOilseed ? "Oil mill / oilseed aggregator" : isFiber ? "Textile buyer / fiber processor" : isPlantation ? "Plantation processor / trader" : isCash ? "Mill / commercial crop aggregator" : "Grain / crop aggregator / wholesaler";
+  const quality = isFruit ? "Grade, size, maturity, appearance, shelf life" : isVegetable ? "Size, freshness, grade, moisture, residue compliance" : isSpice ? "Colour, moisture, volatile oil / quality grade" : isPulse ? "Moisture, grain size, cleanliness, split quality" : isOilseed ? "Oil content, moisture, seed purity" : isFiber ? "Staple/grade, moisture, contamination" : "Moisture, grade, cleanliness, variety and quality";
+  const demand = isFruit ? "Fresh-market and processing demand" : isVegetable ? "Daily regional wholesale demand" : isSpice ? "Processing and specialty demand" : isPulse ? "Food-processing and wholesale demand" : isOilseed ? "Oil-processing demand" : isFiber ? "Textile/industrial demand" : isPlantation ? "Processing and commodity demand" : "Regional wholesale and processing demand";
+  return [name, {
+    crop:name,
+    index,
+    marketType,
+    buyerType,
+    quality,
+    demand,
+    marketRegion:getMarketRegionForCrop(crop),
+    marketCenter:getMarketCenterForCrop(crop),
+    referencePrice:getReferenceMarketPrice(name),
+    live:false,
+    verification:"Verify current price, buyer terms, quality requirements and delivery conditions with a connected/verified provider before sale.",
+    recommendedDocuments:["Crop/variety details","Expected quantity","Harvest window","Quality/grade information"],
+    routeHint:`${name} market / buyer discovery`,
+  }];
+}));
+
+const getCropMarketIntelligence = (cropName:string) => {
+  const canonical = resolveCanonicalCropName(cropName);
+  return cropMarketIntelligence[canonical] || {
+    crop:canonical || cropName,
+    marketType:"Regional agricultural market",
+    buyerType:"Crop aggregator / wholesale buyer",
+    quality:"Moisture, grade, cleanliness and variety",
+    demand:"Regional demand",
+    marketRegion:"Regional agricultural markets",
+    marketCenter:"Regional APMC / Market Yard",
+    referencePrice:"Provider quote required",
+    live:false,
+    verification:"Verify with a connected market provider before sale."
+  };
+};
+
 const lifecycleStageLabels: Record<string, Record<string,string>> = {
   en:{prepare:"Land Preparation",germination:"Germination / Establishment",vegetative:"Vegetative Growth",flowering:"Flowering / Reproductive Stage",filling:"Fruit / Grain / Tuber Development",maturity:"Maturity",harvest:"Harvest"},
   kn:{prepare:"ಜಮೀನು ಸಿದ್ಧತೆ",germination:"ಮೊಳಕೆ / ಸ್ಥಾಪನೆ",vegetative:"ಸಸ್ಯ ಬೆಳವಣಿಗೆ",flowering:"ಹೂಬಿಡುವಿಕೆ / ಸಂತಾನೋತ್ಪತ್ತಿ ಹಂತ",filling:"ಹಣ್ಣು / ಕಾಳು / ಗೆಡ್ಡೆ ಅಭಿವೃದ್ಧಿ",maturity:"ಪಕ್ವತೆ",harvest:"ಕೊಯ್ಲು"},
@@ -751,13 +808,30 @@ const subscriptionPlans = [
 ];
 
 const educationArticles = [
-  {id:"soil-pH",category:"Soil",title:"Understanding soil pH before choosing a crop",read:"6 min",summary:"How pH affects nutrient availability and why a soil test should guide crop selection."},
-  {id:"npk",category:"Nutrition",title:"NPK basics: what N, P and K mean for a crop",read:"8 min",summary:"A farmer-friendly guide to nutrient roles, deficiency signals and safe verification."},
-  {id:"irrigation",category:"Water",title:"How to decide whether irrigation is needed",read:"5 min",summary:"Use soil moisture, rainfall probability and crop stage instead of a fixed schedule."},
-  {id:"vision",category:"Crop Health",title:"What a crop image can and cannot tell you",read:"7 min",summary:"How to interpret AI vision results, uncertainty and when to consult an expert."},
-  {id:"harvest",category:"Harvest",title:"Harvest readiness and post-harvest planning",read:"9 min",summary:"Prepare weather, labor, transport, buyer and storage decisions before harvest."},
-  {id:"market",category:"Market",title:"Preparing for a better farm-gate sale",read:"6 min",summary:"Record quantity, quality, expected harvest date and buyer requirements before selling."}
+  {id:"soil-pH",category:"Soil",title:"Understanding soil pH before choosing a crop",read:"6 min",summary:"How pH affects nutrient availability and why a soil test should guide crop selection.",purpose:"Learn how soil acidity or alkalinity can change nutrient availability and crop suitability.",whatYouLearn:["Understand what soil pH means.","Compare the crop requirement with the tested pH range.","Recognize when a nutrient problem may actually be a pH problem."],steps:["Take a representative soil sample from several spots in the field and use a reliable soil-testing service.","Record the measured pH and compare it with the selected crop profile in Farm Planner.","Check whether the soil pH is below, inside or above the crop's preferred range.","If pH is outside the preferred range, discuss a locally suitable correction plan with an agronomist instead of applying amendments blindly.","Re-test after the recommended correction period and update the field record."],checklist:["Recent soil-test report available","Crop pH range checked","Drainage checked","Organic matter considered","Correction plan verified locally"],avoid:["Do not change soil pH using a generic internet dosage.","Do not assume every yellow leaf is caused by low pH.","Do not skip a soil test when the field repeatedly shows nutrient symptoms."],action:"Open Farm Planner → select the field → compare pH with the selected crop profile → record the next soil action.",quiz:[{q:"Why is pH important?",options:["It controls tractor speed","It affects nutrient availability","It replaces rainfall data"],answer:1}]},
+  {id:"npk",category:"Nutrition",title:"NPK basics: what N, P and K mean for a crop",read:"8 min",summary:"A farmer-friendly guide to nutrient roles, deficiency signals and safe verification.",purpose:"Learn what nitrogen, phosphorus and potassium do and how to connect Farm Planner deficiencies to the input store.",whatYouLearn:["Nitrogen mainly supports vegetative growth and chlorophyll formation.","Phosphorus supports roots and reproductive development.","Potassium supports water regulation, strength and stress response.","A visible symptom is a clue, not a laboratory diagnosis."],steps:["Open the field in Farm Planner and review N, P, K and pH values.","Compare each value with the crop-specific planning target and current growth stage.","Read the deficiency explanation and check whether the symptom is consistent with the crop and field data.","Open the matching fertilizer or nutrient products shown under Farm Planner → Certified Seeds & Fertilizers.","Before purchase or application, verify the soil test, product label, local recommendation and crop stage.","Record the input and application event in Farm History for future traceability."],checklist:["N value reviewed","P value reviewed","K value reviewed","pH reviewed","Crop stage confirmed","Product label checked","Application recorded"],avoid:["Do not diagnose a deficiency from leaf colour alone.","Do not mix products without checking compatibility and label instructions.","Do not treat an estimated planner value as a laboratory result."],action:"Use the deficiency card in Farm Planner to jump directly to the matched fertilizer/input catalogue and then verify the product before purchase.",quiz:[{q:"Which nutrient is strongly associated with vegetative growth?",options:["Nitrogen","Only potassium","Only calcium"],answer:0}]},
+  {id:"irrigation",category:"Water",title:"How to decide whether irrigation is needed",read:"5 min",summary:"Use soil moisture, rainfall probability and crop stage instead of a fixed schedule.",purpose:"Turn weather and soil observations into a practical irrigation decision without pretending that one schedule fits every crop.",whatYouLearn:["Why crop stage changes water demand.","How rainfall probability can change an irrigation decision.","Why soil moisture should be checked before running a pump."],steps:["Check the current soil moisture for the selected field.","Check recent rainfall and the available forecast.","Identify the crop and lifecycle stage because flowering, fruiting and establishment may have different water sensitivity.","If soil moisture is already adequate and meaningful rain is expected, avoid unnecessary irrigation.","If moisture is low and rain is not expected, plan measured irrigation according to the crop and soil type.","After irrigation, record the event and re-check moisture rather than repeating a fixed timer automatically."],checklist:["Moisture checked","Rainfall checked","Crop stage checked","Drainage checked","Pump/hardware status checked","Irrigation event recorded"],avoid:["Do not irrigate simply because a calendar says it is watering day.","Do not keep saturated fields wet without checking drainage.","Do not claim an IoT pump is running when hardware is not connected."],action:"Open Irrigation Pumps → select the field → review moisture and forecast → use the recommended irrigation decision as a planning aid.",quiz:[{q:"What should be checked before irrigation?",options:["Only the crop name","Soil moisture and rainfall/forecast","Only the market price"],answer:1}]},
+  {id:"vision",category:"Crop Health",title:"What a crop image can and cannot tell you",read:"7 min",summary:"How to interpret AI vision results, uncertainty and when to consult an expert.",purpose:"Use Gemini Vision as a crop-health screening assistant while keeping uncertainty and expert verification visible.",whatYouLearn:["How to capture a useful crop image.","How to read condition, confidence, symptoms and severity.","Why an uncertain AI result should not trigger blind chemical treatment."],steps:["Capture a clear, well-lit image of the affected leaf, stem, fruit or plant area.","Upload the image in Vision Diagnostics and wait for the server-side Gemini analysis to complete.","Review the detected crop, condition, possible issue, confidence and visible symptoms.","If the result is uncertain or confidence is low, treat it as a screening result rather than a diagnosis.","Compare the symptoms with field history, weather and crop stage.","Consult an agricultural expert before applying crop-protection chemicals when the diagnosis is uncertain or the problem is severe."],checklist:["Image is clear","Correct crop/field selected","Confidence reviewed","Symptoms reviewed","Field conditions considered","Expert escalation considered"],avoid:["Do not treat every image as a confirmed disease.","Do not rely on a single image when symptoms are unclear.","Do not use unvalidated pesticide dosages from an AI response."],action:"Run Vision Diagnostics → review confidence and symptoms → connect the result to Expert Consult when the model is uncertain or severity is concerning.",quiz:[{q:"What should you do when vision confidence is low?",options:["Apply a random pesticide","Ignore the field","Verify with field evidence and an expert"],answer:2}]},
+  {id:"harvest",category:"Harvest",title:"Harvest readiness and post-harvest planning",read:"9 min",summary:"Prepare weather, labor, transport, buyer and storage decisions before harvest.",purpose:"Reduce avoidable harvest losses by planning maturity, labor, logistics and buyer requirements together.",whatYouLearn:["How to confirm crop-specific maturity.","How to prepare labor and transport before the harvest window.","Why buyer quality requirements should be checked early."],steps:["Review the crop lifecycle and expected maturity window in Farm Planner.","Check weather conditions around the planned harvest period.","Confirm seasonal labor availability and equipment readiness.","Review Mandi Aggregators and Direct Buyer Directory records for the crop and verify current buyer terms.","Arrange transport and suitable temporary storage before harvesting a large quantity.","Record harvested quantity, quality, expenses and sale details in Farm History."],checklist:["Maturity checked","Weather window checked","Labor arranged","Transport arranged","Buyer contacted","Storage prepared","Harvest record ready"],avoid:["Do not treat reference market prices as guaranteed live prices.","Do not harvest solely because the calendar date has arrived.","Do not delay buyer quality checks until after harvest."],action:"Open Farm Planner → review maturity → open Mandi & Buyers → contact a verified/available buyer when real data is connected.",quiz:[{q:"Why plan transport before harvest?",options:["To avoid all field work","To reduce delays and post-harvest risk","To change soil pH"],answer:1}]},
+  {id:"market",category:"Market",title:"Preparing for a better farm-gate sale",read:"6 min",summary:"Record quantity, quality, expected harvest date and buyer requirements before selling.",purpose:"Turn farm production information into a clear buyer inquiry and reduce last-minute negotiation problems.",whatYouLearn:["What information buyers commonly need.","How to prepare a buyer inquiry.","Why live market prices must come from a verified market provider."],steps:["Select the crop and record expected quantity and harvest window.","Record variety, quality grade and important quality observations.","Open Mandi Aggregators or Direct Buyer Directory and filter to the crop.","Review the buyer's region, category and stated requirements.","Send an inquiry with quantity, harvest date and quality information.","Confirm price, grading, weighing, pickup/delivery and payment terms directly before committing the sale."],checklist:["Crop and variety recorded","Quantity estimated","Harvest date estimated","Quality recorded","Buyer requirements checked","Price verified","Payment terms verified"],avoid:["Do not treat reference prices as guaranteed market prices.","Do not send sensitive payment credentials to an unverified buyer.","Do not commit a contract without reading its terms."],action:"Open Mandi & Buyers → choose your crop → compare buyer records → send an inquiry with your expected quantity and harvest window.",quiz:[{q:"Which information helps a buyer respond to an inquiry?",options:["Only farmer name","Quantity, harvest window and quality","Only field colour"],answer:1}]}
 ];
+
+const educationSectionText: Record<string, Record<string,string>> = {
+  en:{purpose:"What this guide helps you do",learn:"What you will learn",steps:"Step-by-step guide",checklist:"Field checklist",avoid:"Avoid these mistakes",action:"Try this in YieldSense AI",quiz:"Quick check",read:"Read guide",complete:"Guide completed",back:"Back to guides",verify:"Educational content only. Validate crop-specific decisions with your soil test, product label and qualified local agronomist.",next:"Next recommended action"},
+  kn:{purpose:"ಈ ಮಾರ್ಗದರ್ಶಿ ನಿಮಗೆ ಏನು ಮಾಡಲು ಸಹಾಯ ಮಾಡುತ್ತದೆ",learn:"ನೀವು ಏನು ಕಲಿಯುತ್ತೀರಿ",steps:"ಹಂತ ಹಂತದ ಮಾರ್ಗದರ್ಶಿ",checklist:"ಜಮೀನು ಪರಿಶೀಲನಾ ಪಟ್ಟಿ",avoid:"ಈ ತಪ್ಪುಗಳನ್ನು ತಪ್ಪಿಸಿ",action:"YieldSense AI ನಲ್ಲಿ ಇದನ್ನು ಪ್ರಯತ್ನಿಸಿ",quiz:"ತ್ವರಿತ ಪರಿಶೀಲನೆ",read:"ಮಾರ್ಗದರ್ಶಿ ಓದಿ",complete:"ಮಾರ್ಗದರ್ಶಿ ಪೂರ್ಣಗೊಂಡಿದೆ",back:"ಮಾರ್ಗದರ್ಶಿಗಳಿಗೆ ಹಿಂತಿರುಗಿ",verify:"ಇದು ಶೈಕ್ಷಣಿಕ ಮಾಹಿತಿ ಮಾತ್ರ. ಮಣ್ಣಿನ ಪರೀಕ್ಷೆ, ಉತ್ಪನ್ನ ಲೇಬಲ್ ಮತ್ತು ಸ್ಥಳೀಯ ಕೃಷಿ ತಜ್ಞರ ಸಲಹೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.",next:"ಮುಂದಿನ ಶಿಫಾರಸು ಕ್ರಮ"},
+  hi:{purpose:"यह गाइड आपको क्या करने में मदद करती है",learn:"आप क्या सीखेंगे",steps:"चरण-दर-चरण मार्गदर्शिका",checklist:"खेत जांच सूची",avoid:"इन गलतियों से बचें",action:"YieldSense AI में इसे आजमाएं",quiz:"त्वरित जांच",read:"गाइड पढ़ें",complete:"गाइड पूरी हुई",back:"गाइड पर वापस जाएं",verify:"यह केवल शैक्षिक जानकारी है। मिट्टी परीक्षण, उत्पाद लेबल और स्थानीय कृषि विशेषज्ञ की सलाह से निर्णय सत्यापित करें।",next:"अगला सुझाया कदम"},
+  te:{purpose:"ఈ గైడ్ మీకు ఏమి చేయడంలో సహాయపడుతుంది",learn:"మీరు ఏమి నేర్చుకుంటారు",steps:"దశల వారీ మార్గదర్శకం",checklist:"పొలం చెక్‌లిస్ట్",avoid:"ఈ తప్పులను నివారించండి",action:"YieldSense AIలో ప్రయత్నించండి",quiz:"త్వరిత తనిఖీ",read:"గైడ్ చదవండి",complete:"గైడ్ పూర్తయింది",back:"గైడ్‌లకు తిరిగి వెళ్లండి",verify:"ఇది విద్యా సమాచారం మాత్రమే. మట్టి పరీక్ష, ఉత్పత్తి లేబుల్ మరియు స్థానిక వ్యవసాయ నిపుణుడితో నిర్ణయాలను ధృవీకరించండి.",next:"తదుపరి సిఫార్సు చర్య"},
+  ta:{purpose:"இந்த வழிகாட்டி உங்களுக்கு உதவுவது",learn:"நீங்கள் கற்றுக்கொள்வது",steps:"படிப்படியான வழிகாட்டி",checklist:"வயல் சரிபார்ப்பு பட்டியல்",avoid:"இந்த தவறுகளைத் தவிர்க்கவும்",action:"YieldSense AI-ல் முயற்சிக்கவும்",quiz:"விரைவு சரிபார்ப்பு",read:"வழிகாட்டியைப் படிக்கவும்",complete:"வழிகாட்டி முடிந்தது",back:"வழிகாட்டிகளுக்குத் திரும்பவும்",verify:"இது கல்வி தகவல் மட்டுமே. மண் பரிசோதனை, தயாரிப்பு லேபிள் மற்றும் உள்ளூர் வேளாண் நிபுணரிடம் முடிவுகளைச் சரிபார்க்கவும்.",next:"அடுத்த பரிந்துரைக்கப்பட்ட செயல்"},
+  ml:{purpose:"ഈ ഗൈഡ് നിങ്ങളെ സഹായിക്കുന്നത്",learn:"നിങ്ങൾ പഠിക്കുന്നത്",steps:"ഘട്ടം ഘട്ടമായുള്ള ഗൈഡ്",checklist:"ഫീൽഡ് ചെക്ക്ലിസ്റ്റ്",avoid:"ഈ പിഴവുകൾ ഒഴിവാക്കുക",action:"YieldSense AIയിൽ പരീക്ഷിക്കുക",quiz:"ദ്രുത പരിശോധന",read:"ഗൈഡ് വായിക്കുക",complete:"ഗൈഡ് പൂർത്തിയായി",back:"ഗൈഡുകളിലേക്ക് മടങ്ങുക",verify:"ഇത് വിദ്യാഭ്യാസ വിവരങ്ങൾ മാത്രമാണ്. മണ്ണ് പരിശോധന, ഉൽപ്പന്ന ലേബൽ, പ്രാദേശിക കാർഷിക വിദഗ്ധൻ എന്നിവ ഉപയോഗിച്ച് തീരുമാനങ്ങൾ പരിശോധിക്കുക.",next:"അടുത്ത ശുപാർശ ചെയ്യുന്ന നടപടി"},
+  mr:{purpose:"हे मार्गदर्शक तुम्हाला काय करण्यास मदत करते",learn:"तुम्ही काय शिकाल",steps:"टप्प्याटप्प्याने मार्गदर्शक",checklist:"शेत तपासणी यादी",avoid:"या चुका टाळा",action:"YieldSense AI मध्ये वापरून पाहा",quiz:"त्वरित तपासणी",read:"मार्गदर्शक वाचा",complete:"मार्गदर्शक पूर्ण",back:"मार्गदर्शकांकडे परत जा",verify:"ही केवळ शैक्षणिक माहिती आहे. माती चाचणी, उत्पादन लेबल आणि स्थानिक कृषी तज्ज्ञांच्या सल्ल्याने निर्णय तपासा.",next:"पुढील शिफारस केलेली कृती"},
+  bn:{purpose:"এই গাইড আপনাকে কী করতে সাহায্য করবে",learn:"আপনি যা শিখবেন",steps:"ধাপে ধাপে নির্দেশিকা",checklist:"ক্ষেত্র চেকলিস্ট",avoid:"এই ভুলগুলি এড়িয়ে চলুন",action:"YieldSense AI-তে চেষ্টা করুন",quiz:"দ্রুত পরীক্ষা",read:"গাইড পড়ুন",complete:"গাইড সম্পন্ন",back:"গাইডে ফিরে যান",verify:"এটি শুধুমাত্র শিক্ষামূলক তথ্য। মাটি পরীক্ষা, পণ্যের লেবেল এবং স্থানীয় কৃষি বিশেষজ্ঞের পরামর্শ দিয়ে সিদ্ধান্ত যাচাই করুন।",next:"পরবর্তী প্রস্তাবিত কাজ"},
+  gu:{purpose:"આ માર્ગદર્શિકા તમને શું કરવામાં મદદ કરે છે",learn:"તમે શું શીખશો",steps:"પગલું-દર-પગલું માર્ગદર્શિકા",checklist:"ખેતર ચેકલિસ્ટ",avoid:"આ ભૂલો ટાળો",action:"YieldSense AI માં અજમાવો",quiz:"ઝડપી તપાસ",read:"માર્ગદર્શિકા વાંચો",complete:"માર્ગદર્શિકા પૂર્ણ",back:"માર્ગદર્શિકાઓ પર પાછા જાઓ",verify:"આ માત્ર શૈક્ષણિક માહિતી છે. માટી પરીક્ષણ, ઉત્પાદન લેબલ અને સ્થાનિક કૃષિ નિષ્ણાત સાથે નિર્ણય ચકાસો.",next:"આગળની ભલામણ કરેલ ક્રિયા"},
+  pa:{purpose:"ਇਹ ਗਾਈਡ ਤੁਹਾਡੀ ਕਿਵੇਂ ਮਦਦ ਕਰਦੀ ਹੈ",learn:"ਤੁਸੀਂ ਕੀ ਸਿੱਖੋਗੇ",steps:"ਕਦਮ-ਦਰ-ਕਦਮ ਗਾਈਡ",checklist:"ਖੇਤ ਚੈੱਕਲਿਸਟ",avoid:"ਇਨ੍ਹਾਂ ਗਲਤੀਆਂ ਤੋਂ ਬਚੋ",action:"YieldSense AI ਵਿੱਚ ਅਜ਼ਮਾਓ",quiz:"ਤੁਰੰਤ ਜਾਂਚ",read:"ਗਾਈਡ ਪੜ੍ਹੋ",complete:"ਗਾਈਡ ਪੂਰੀ",back:"ਗਾਈਡਾਂ ਵੱਲ ਵਾਪਸ ਜਾਓ",verify:"ਇਹ ਸਿਰਫ਼ ਸਿੱਖਿਆਤਮਕ ਜਾਣਕਾਰੀ ਹੈ। ਮਿੱਟੀ ਟੈਸਟ, ਉਤਪਾਦ ਲੇਬਲ ਅਤੇ ਸਥਾਨਕ ਖੇਤੀ ਮਾਹਿਰ ਨਾਲ ਫੈਸਲੇ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ।",next:"ਅਗਲਾ ਸੁਝਾਇਆ ਕਦਮ"},
+  or:{purpose:"ଏହି ଗାଇଡ୍ ଆପଣଙ୍କୁ କଣ କରିବାରେ ସାହାଯ୍ୟ କରେ",learn:"ଆପଣ କଣ ଶିଖିବେ",steps:"ପଦକ୍ଷେପ ଅନୁଯାୟୀ ଗାଇଡ୍",checklist:"କ୍ଷେତ୍ର ଯାଞ୍ଚ ତାଲିକା",avoid:"ଏହି ଭୁଲଗୁଡ଼ିକୁ ଏଡାନ୍ତୁ",action:"YieldSense AIରେ ଚେଷ୍ଟା କରନ୍ତୁ",quiz:"ଦ୍ରୁତ ଯାଞ୍ଚ",read:"ଗାଇଡ୍ ପଢନ୍ତୁ",complete:"ଗାଇଡ୍ ସମ୍ପୂର୍ଣ୍ଣ",back:"ଗାଇଡ୍‌କୁ ଫେରନ୍ତୁ",verify:"ଏହା କେବଳ ଶିକ୍ଷାମୂଳକ ସୂଚନା। ମାଟି ପରୀକ୍ଷା, ଉତ୍ପାଦ ଲେବଲ୍ ଏବଂ ସ୍ଥାନୀୟ କୃଷି ବିଶେଷଜ୍ଞଙ୍କ ସହିତ ନିଷ୍ପତ୍ତି ଯାଞ୍ଚ କରନ୍ତୁ।",next:"ପରବର୍ତ୍ତୀ ପରାମର୍ଶିତ କାର୍ଯ୍ୟ"},
+  ur:{purpose:"یہ گائیڈ آپ کو کس کام میں مدد دیتی ہے",learn:"آپ کیا سیکھیں گے",steps:"مرحلہ وار رہنمائی",checklist:"کھیت کی چیک لسٹ",avoid:"ان غلطیوں سے بچیں",action:"YieldSense AI میں آزمائیں",quiz:"فوری جانچ",read:"گائیڈ پڑھیں",complete:"گائیڈ مکمل",back:"گائیڈز پر واپس جائیں",verify:"یہ صرف تعلیمی معلومات ہے۔ مٹی کے ٹیسٹ، پروڈکٹ لیبل اور مقامی زرعی ماہر سے فیصلے کی تصدیق کریں۔",next:"اگلا تجویز کردہ قدم"}
+};
+const getEducationText = (language:string,key:string) => educationSectionText[language]?.[key] || educationSectionText.en[key] || key;
+const EDUCATION_GUIDE_VERSION = "2026.10-farmer-learning-v2";
 
 const localServiceDirectory = [
   {id:"local-agro",name:"Local Agronomy Support",type:"Agronomy",region:"Mandya, Karnataka",availability:"Directory listing",verified:false},
@@ -1012,20 +1086,35 @@ const resetGoogleTranslatedPage = () => {
 
 const applyGoogleTranslation = (language: string, attempt = 0) => {
   if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (language === "en") {
+  const safeLanguage = YIELDSENSE_TRANSLATION_LANGUAGES.includes(language as YieldSenseLanguageCode) ? language : "en";
+  document.documentElement.setAttribute("lang", safeLanguage);
+  document.documentElement.setAttribute("translate", safeLanguage === "en" ? "no" : "yes");
+  if (safeLanguage === "en") {
     resetGoogleTranslatedPage();
     return;
   }
+
+  setGoogleTranslationCookie(safeLanguage);
+  translatePlaceholdersForLanguage(safeLanguage);
+
   const combo = document.querySelector<HTMLSelectElement>(".goog-te-combo");
   if (combo) {
-    setGoogleTranslationCookie(language);
-    if (combo.value !== language) combo.value = language;
-    combo.dispatchEvent(new Event("change"));
-    translatePlaceholdersForLanguage(language);
+    try {
+      // Google Translate's hidden select sometimes ignores a single synthetic
+      // change during React/HMR updates. Setting both value and events makes the
+      // bridge resilient without exposing credentials or replacing app state.
+      combo.value = safeLanguage;
+      combo.dispatchEvent(new Event("change", { bubbles: true }));
+      combo.dispatchEvent(new Event("input", { bubbles: true }));
+    } catch {}
+    translatePlaceholdersForLanguage(safeLanguage);
     return;
   }
-  if (attempt < 20) {
-    window.setTimeout(() => applyGoogleTranslation(language, attempt + 1), 250);
+
+  // The Google widget can take a few seconds to initialise after Next.js HMR.
+  // Retry for longer than the previous 5-second window, but stop deterministically.
+  if (attempt < 40) {
+    window.setTimeout(() => applyGoogleTranslation(safeLanguage, attempt + 1), 250);
   }
 };
 
@@ -1363,27 +1452,42 @@ export default function YieldSenseApp() {
     return () => window.clearTimeout(timer);
   }, [activeTab, lang]);
 
-  // A small observer handles dynamically mounted marketplace, history, chat,
-  // planner and modal content without changing the application's React state.
-  // Google Translate performs the actual language conversion; this observer
-  // only requests the selected language again when a meaningful DOM update is
-  // detected. It is disconnected during cleanup to avoid memory leaks.
+  // IMPORTANT: this observer intentionally depends only on `lang`. Navigation is
+  // handled by the separate activeTab/language effect above. Keeping a stable
+  // dependency array prevents React error #310-style dependency-size changes
+  // during hot reloads or rapid tab switches.
+  // Dynamic React sections are translated after navigation, modal opening and
+  // marketplace/planner refreshes. The observer is deliberately bounded so the
+  // Google Translate DOM mutations cannot create an infinite React/DOM loop.
   useEffect(() => {
     if (typeof document === "undefined" || typeof window === "undefined") return;
     const root = document.getElementById("yieldsense-app-root");
     if (!root) return;
-    let scheduled = false;
+    let timer: number | null = null;
+    let lastRun = 0;
+    let passCount = 0;
+    const runBoundedTranslation = () => {
+      const now = Date.now();
+      if (now - lastRun < 900 || passCount >= 8) return;
+      lastRun = now;
+      passCount += 1;
+      applyGoogleTranslation(lang);
+      translatePlaceholdersForLanguage(lang);
+    };
     const observer = new MutationObserver(() => {
-      if (scheduled) return;
-      scheduled = true;
-      window.setTimeout(() => {
-        scheduled = false;
-        applyGoogleTranslation(lang);
-        translatePlaceholdersForLanguage(lang);
-      }, 450);
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        runBoundedTranslation();
+      }, 700);
     });
     observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    const passes = [1200, 2200, 3500, 5000, 7000].map(delay => window.setTimeout(runBoundedTranslation, delay));
+    return () => {
+      observer.disconnect();
+      if (timer !== null) window.clearTimeout(timer);
+      passes.forEach(id => window.clearTimeout(id));
+    };
   }, [lang]);
 
   useEffect(() => {
@@ -1885,7 +1989,14 @@ export default function YieldSenseApp() {
         if(phScore>=9) parts.push(`pH is close to ${c.ph}`);
         if(nutrientScore>=8) parts.push("nutrient profile is relatively compatible");
         if(!parts.length) parts.push("requires more field validation before selection");
-        return {...c,score,factors:{soil:Math.round(soilScore),climate:Math.round(climateScore),water:Math.round(waterScore),ph:Math.round(phScore),nutrients:Math.round(nutrientScore),risk:riskScore},reason:`${parts.slice(0,3).join("; ")}. Validate local agronomy, water availability and market conditions before sowing.`};
+        const acres = Number(f?.area || 1) || 1;
+        const referencePrice = Number(cropMarketPrices[c.name] || 0);
+        const estimatedYieldPerAcre = Math.max(0.5, Number(c.durationDays || 120) / 120 * (c.category?.toLowerCase().includes("vegetable") ? 6 : c.category?.toLowerCase().includes("fruit") ? 5 : 2.5));
+        const estimatedYield = Number((estimatedYieldPerAcre * acres).toFixed(2));
+        const estimatedCost = Math.round(acres * (8500 + Number(c.nitrogen || 0) * 12 + Number(c.phosphorus || 0) * 8 + Number(c.potassium || 0) * 6));
+        const estimatedRevenue = referencePrice > 0 ? Math.round(estimatedYield * referencePrice) : 0;
+        const estimatedProfit = estimatedRevenue > 0 ? estimatedRevenue - estimatedCost : null;
+        return {...c,score,factors:{soil:Math.round(soilScore),climate:Math.round(climateScore),water:Math.round(waterScore),ph:Math.round(phScore),nutrients:Math.round(nutrientScore),risk:riskScore},reason:`${parts.slice(0,3).join("; ")}. Validate local agronomy, water availability and market conditions before sowing.`,estimatedYield,estimatedCost,estimatedRevenue,estimatedProfit,referencePrice,marketProfile:getCropMarketIntelligence(c.name)};
       }).sort((a:any,b:any)=>b.score-a.score).slice(0,8);
       setCropRecommendation({field:f?.name||"Active field",activeCrop,inputs:{soil:f?.soil||"Loamy",temperature:temp,rainfall:rain,pH:fieldPh,moisture:fieldMoisture,nitrogen:fieldN,phosphorus:fieldP,potassium:fieldK},candidates,generatedAt:new Date().toISOString()});
       setRecommendationLoading(false);addHistory("recommendation","Crop suitability recommendation generated");
@@ -2593,7 +2704,7 @@ export default function YieldSenseApp() {
 
                 <div className="mt-10 bg-gradient-to-br from-[#0D1912] to-[#09110C] border border-[#B5F140]/20 rounded-[2rem] p-7 md:p-9 shadow-2xl">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-7"><div><p className="text-[10px] text-[#B5F140] uppercase tracking-[0.2em] font-bold flex items-center gap-2"><Sparkles size={14}/> AI Crop Recommendation</p><h3 className="text-3xl font-serif text-white mt-2">What should I grow on this field?</h3><p className="text-xs text-gray-500 mt-2 max-w-2xl">The engine compares the selected field's soil, pH, moisture, N/P/K, weather and rainfall against the complete crop catalogue. It ranks suitability; it does not guarantee yield or profitability.</p></div><button onClick={runCropRecommendation} disabled={recommendationLoading} className="bg-[#B5F140] text-[#102015] px-6 py-3 rounded-xl text-xs font-black disabled:opacity-50 flex items-center gap-2">{recommendationLoading?<RefreshCw size={15} className="animate-spin"/>:<Sparkles size={15}/>} {recommendationLoading?'Analyzing field…':'Generate recommendation'}</button></div>
-                  {cropRecommendation ? <div className="space-y-5"><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[["Field",cropRecommendation.field],["Soil",cropRecommendation.inputs?.soil],["pH",cropRecommendation.inputs?.pH],["Moisture",`${cropRecommendation.inputs?.moisture}%`]].map(([a,b])=><div key={`rec-input-${a}`} className="bg-black/30 rounded-xl p-4 border border-white/5"><p className="text-[9px] uppercase tracking-widest text-gray-500">{a}</p><p className="text-sm font-bold text-white mt-2">{b}</p></div>)}</div><div className="grid lg:grid-cols-2 gap-4">{cropRecommendation.candidates.map((c:any,idx:number)=><div key={`recommendation-${c.name}`} className={`rounded-2xl border p-5 ${idx===0?'border-[#B5F140]/40 bg-[#B5F140]/5':'border-white/5 bg-black/20'}`}><div className="flex items-start justify-between gap-4"><div><span className="text-[9px] font-black uppercase tracking-widest text-gray-500">#{idx+1}</span><h4 className="font-bold text-white mt-1">{getCropDisplayName(c.name,plannerLanguage)}</h4><p className="text-[10px] text-gray-500 mt-1">{c.category} · {c.climate} · {c.duration}</p></div><span className="text-xl font-serif text-[#B5F140]">{c.score}%</span></div><div className="grid grid-cols-3 gap-2 mt-4">{[["Soil",c.factors?.soil],["Climate",c.factors?.climate],["Water",c.factors?.water],["pH",c.factors?.ph],["Nutrients",c.factors?.nutrients],["Risk",c.factors?.risk]].map(([a,b])=><div key={`factor-${c.name}-${a}`} className="bg-white/5 rounded-lg p-2"><p className="text-[8px] uppercase text-gray-500">{a}</p><p className="text-xs font-bold text-white mt-1">{b}/score</p></div>)}</div><p className="text-xs text-gray-400 mt-4 leading-relaxed">{c.reason}</p><button onClick={()=>{setPlannerCrop(c.name);setForecastForm((prev:any)=>({...prev,crop:c.name,...(cropBaselines[c.name]||{})}));addHistory("recommendation",`${c.name} selected from recommendation`);}} className="mt-4 text-[10px] font-bold text-[#B5F140] border border-[#B5F140]/20 px-3 py-2 rounded-lg hover:bg-[#B5F140]/10">Use this crop in Planner</button></div>)}</div><p className="text-[9px] text-gray-600">Generated {new Date(cropRecommendation.generatedAt).toLocaleString()} · Validate variety, irrigation, soil test and local market conditions before planting.</p></div> : <div className="bg-black/20 border border-dashed border-white/10 rounded-2xl p-8 text-center"><Sparkles className="mx-auto text-gray-600" size={26}/><p className="text-sm text-gray-400 mt-3">Run the engine to rank the complete crop catalogue for this field.</p></div>}
+                  {cropRecommendation ? <div className="space-y-5"><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[["Field",cropRecommendation.field],["Soil",cropRecommendation.inputs?.soil],["pH",cropRecommendation.inputs?.pH],["Moisture",`${cropRecommendation.inputs?.moisture}%`]].map(([a,b])=><div key={`rec-input-${a}`} className="bg-black/30 rounded-xl p-4 border border-white/5"><p className="text-[9px] uppercase tracking-widest text-gray-500">{a}</p><p className="text-sm font-bold text-white mt-2">{b}</p></div>)}</div><div className="grid lg:grid-cols-2 gap-4">{cropRecommendation.candidates.map((c:any,idx:number)=><div key={`recommendation-${c.name}-${idx}`} className={`rounded-2xl border p-5 ${idx===0?'border-[#B5F140]/40 bg-[#B5F140]/5':'border-white/5 bg-black/20'}`}><div className="flex items-start justify-between gap-4"><div><span className="text-[9px] font-black uppercase tracking-widest text-gray-500">#{idx+1}</span><h4 className="font-bold text-white mt-1">{getCropDisplayName(c.name,plannerLanguage)}</h4><p className="text-[10px] text-gray-500 mt-1">{c.category} · {c.climate} · {c.duration}</p></div><span className="text-xl font-serif text-[#B5F140]">{c.score}%</span></div><div className="grid grid-cols-3 gap-2 mt-4">{[["Soil",c.factors?.soil],["Climate",c.factors?.climate],["Water",c.factors?.water],["pH",c.factors?.ph],["Nutrients",c.factors?.nutrients],["Risk",c.factors?.risk]].map(([a,b])=><div key={`factor-${c.name}-${a}`} className="bg-white/5 rounded-lg p-2"><p className="text-[8px] uppercase text-gray-500">{a}</p><p className="text-xs font-bold text-white mt-1">{b}/score</p></div>)}</div><div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4"><div className="bg-white/5 rounded-lg p-2"><p className="text-[8px] uppercase text-gray-500">Est. yield</p><p className="text-xs font-bold text-white mt-1">{c.estimatedYield ?? "—"}</p></div><div className="bg-white/5 rounded-lg p-2"><p className="text-[8px] uppercase text-gray-500">Water</p><p className="text-xs font-bold text-white mt-1">{c.waterRequirement || c.moisture || "—"}</p></div><div className="bg-white/5 rounded-lg p-2"><p className="text-[8px] uppercase text-gray-500">Cost*</p><p className="text-xs font-bold text-white mt-1">{c.estimatedCost ? `₹${Number(c.estimatedCost).toLocaleString("en-IN")}` : "—"}</p></div><div className="bg-white/5 rounded-lg p-2"><p className="text-[8px] uppercase text-gray-500">Profit*</p><p className="text-xs font-bold text-[#B5F140] mt-1">{c.estimatedProfit !== null && c.estimatedProfit !== undefined ? `₹${Number(c.estimatedProfit).toLocaleString("en-IN")}` : "Quote needed"}</p></div></div><p className="text-xs text-gray-400 mt-4 leading-relaxed">{c.reason}</p><div className="mt-4 flex flex-wrap gap-2"><button onClick={()=>{setPlannerCrop(c.name);setForecastForm((prev:any)=>({...prev,crop:c.name,...(cropBaselines[c.name]||{})}));addHistory("recommendation",`${c.name} selected from recommendation`);}} className="text-[10px] font-bold text-[#B5F140] border border-[#B5F140]/20 px-3 py-2 rounded-lg hover:bg-[#B5F140]/10">Use this crop in Planner</button><button onClick={()=>{setSelectedMarketCrop(c.name);setMarketSearch("");setActiveTab("market");}} className="text-[10px] font-bold text-white border border-white/10 px-3 py-2 rounded-lg hover:bg-white/5">View Mandi & Buyers</button></div></div>)}</div><p className="text-[9px] text-gray-600">Generated {new Date(cropRecommendation.generatedAt).toLocaleString()} · Validate variety, irrigation, soil test and local market conditions before planting.</p></div> : <div className="bg-black/20 border border-dashed border-white/10 rounded-2xl p-8 text-center"><Sparkles className="mx-auto text-gray-600" size={26}/><p className="text-sm text-gray-400 mt-3">Run the engine to rank the complete crop catalogue for this field.</p></div>}
                 </div>
            </div>
         )}
@@ -2719,6 +2830,13 @@ export default function YieldSenseApp() {
             <header><p className="text-[10px] tracking-[0.2em] text-[#B5F140] uppercase font-bold">Platform Blueprint</p><h2 className="text-5xl font-serif tracking-tight text-white mb-3">System Architecture</h2><p className="text-sm text-gray-400 max-w-4xl">A layered view of the complete YieldSense flow: users → frontend → backend APIs → AI/ML → data stores → external agricultural providers.</p></header>
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[["1","Experience","Next.js / React / Tailwind",LayoutDashboard],["2","API Services","FastAPI / REST / JWT",Globe],["3","AI & ML","Yield model / recommendations / Vision",Cpu],["4","Data","PostgreSQL / SQLAlchemy / datasets",Database],["5","Integrations","Weather / IoT / Mandi / payments",Wifi]].map(([n,title,desc,I]:any)=><div key={String(n)} className="bg-[#0D1912] border border-[#1A2E22] rounded-2xl p-5"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-xl bg-[#B5F140]/10 flex items-center justify-center"><I size={16} className="text-[#B5F140]"/></div><span className="text-[10px] font-bold text-gray-500">LAYER {n}</span></div><h3 className="text-lg font-bold text-white mt-4">{title}</h3><p className="text-xs text-gray-500 mt-2 leading-relaxed">{desc}</p></div>)}</div>
             <div className="bg-[#0A160F] border border-[#1A2E22] rounded-[2rem] p-6 md:p-10 overflow-x-auto"><div className="min-w-[1000px]"><div className="grid grid-cols-5 gap-3"><div className="space-y-3"><p className="text-[9px] uppercase tracking-widest text-gray-500">Users</p>{["Farmer","Agronomist","Admin"].map(x=><div key={x} className="p-4 rounded-xl bg-white/5 border border-white/5 text-sm font-bold text-center">{x}</div>)}</div><div className="space-y-3"><p className="text-[9px] uppercase tracking-widest text-gray-500">Frontend</p>{["Dashboard","Yield Forecast","Farm Planner","Vision AI","Marketplace","AI Assistant","History"].map(x=><div key={x} className="p-3 rounded-xl bg-[#B5F140]/10 border border-[#B5F140]/20 text-xs text-center">{x}</div>)}</div><div className="space-y-3"><p className="text-[9px] uppercase tracking-widest text-gray-500">Backend</p>{["/auth","/predict","/vision","/fields","/history","/expert"].map(x=><div key={x} className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs font-mono text-center">{x}</div>)}</div><div className="space-y-3"><p className="text-[9px] uppercase tracking-widest text-gray-500">Intelligence</p>{["Random Forest","Crop Recommendation","Crop Lifecycle","Gemini Vision","Risk Rules","Input Matching"].map(x=><div key={x} className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-center">{x}</div>)}</div><div className="space-y-3"><p className="text-[9px] uppercase tracking-widest text-gray-500">Data / Providers</p>{["PostgreSQL","FAOSTAT / USDA","Open-Meteo","IoT Telemetry","Mandi feeds","Payment gateway"].map(x=><div key={x} className="p-3 rounded-xl bg-white/5 border border-white/5 text-xs text-center">{x}</div>)}</div></div><div className="grid grid-cols-4 gap-3 mt-6 text-center text-[10px] text-gray-500"><div>↓ authentication</div><div>↓ validated inputs</div><div>↓ inference / rules</div><div>↓ storage / integrations</div></div></div></div>
+            <div className="bg-gradient-to-r from-[#0D1912] via-[#0A160F] to-[#12281C] border border-[#B5F140]/15 rounded-[2rem] p-6 md:p-8 overflow-x-auto">
+              <div className="flex items-center justify-between gap-4 mb-6"><div><p className="text-[10px] uppercase tracking-[0.2em] text-[#B5F140] font-bold">End-to-end decision pipeline</p><h3 className="text-2xl font-serif mt-2">From Farm Data to Farmer Action</h3></div><span className="text-[9px] px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-gray-400">Production adapters are connector-ready</span></div>
+              <div className="min-w-[900px] grid grid-cols-7 gap-2 items-stretch">
+                {["Field & Profile","Soil + Weather","Crop Engine","AI / ML","Recommendations","Marketplace / Mandi","Farmer Action"].map((stage:string,index:number)=><div key={`architecture-flow-${stage}-${index}`} className="relative bg-black/25 border border-white/5 rounded-xl p-4 text-center"><div className="w-8 h-8 mx-auto rounded-full bg-[#B5F140]/10 border border-[#B5F140]/20 flex items-center justify-center text-[#B5F140] text-xs font-black">{index+1}</div><p className="text-xs font-bold text-white mt-3">{stage}</p><p className="text-[9px] text-gray-500 mt-2 leading-relaxed">{["Registered farm context and history","NPK, pH, moisture, rainfall and temperature","Crop profiles, lifecycle and suitability scoring","Yield, vision and rule-based intelligence","What to grow, what to buy and what to do next","Seeds, fertilizer, mandi and buyer pathways","Irrigate, scout, purchase, consult or harvest"][index]}</p>{index<6&&<span className="hidden xl:block absolute -right-3 top-1/2 -translate-y-1/2 text-[#B5F140]">→</span>}</div>)}
+              </div>
+            </div>
+
             <div className="grid lg:grid-cols-3 gap-5"><div className="bg-[#0D1912] p-6 rounded-2xl border border-[#1A2E22]"><div className="flex items-center gap-3"><ShieldCheck className="text-[#B5F140]" size={20}/><h3 className="font-bold">Security</h3></div><ul className="mt-4 space-y-2 text-xs text-gray-400"><li>• JWT authentication belongs to the backend.</li><li>• Password hashing stays server-side.</li><li>• Gemini credentials stay in environment variables.</li><li>• Client forms validate before requests.</li></ul></div><div className="bg-[#0D1912] p-6 rounded-2xl border border-[#1A2E22]"><div className="flex items-center gap-3"><Database className="text-blue-400" size={20}/><h3 className="font-bold">Data lifecycle</h3></div><ul className="mt-4 space-y-2 text-xs text-gray-400"><li>• Field registration → field record.</li><li>• Soil/weather → prediction and recommendation.</li><li>• Prediction → history and analytics.</li><li>• Vision/expert → image-backed workflows.</li></ul></div><div className="bg-[#0D1912] p-6 rounded-2xl border border-[#1A2E22]"><div className="flex items-center gap-3"><Wifi className="text-[#FFD166]" size={20}/><h3 className="font-bold">Provider status</h3></div><ul className="mt-4 space-y-2 text-xs text-gray-400"><li>• IoT requires real sensor credentials.</li><li>• Market values are reference unless a live feed is connected.</li><li>• Checkout is demo until a payment backend is connected.</li><li>• Real maps require GPS coordinates.</li></ul></div></div>
             <div className="bg-black/30 border border-[#B5F140]/10 rounded-2xl p-6"><p className="text-[10px] uppercase tracking-widest text-[#B5F140] font-bold">Architecture principle</p><p className="text-sm text-gray-400 mt-3 leading-relaxed">The frontend should never pretend a provider is connected. It can show planning intelligence locally, but live weather, IoT, market, payment and map services must be backed by their actual integrations before being labeled live.</p></div>
           </div>
@@ -2732,7 +2850,7 @@ export default function YieldSenseApp() {
               {[['Registered Fields',fields.length],['Total Acres',totalAcres.toFixed(1)],['Active Crop',fields[activeFieldIndex]?.crop || 'Not selected'],['Field Health',surveillanceData[activeFieldIndex]?.health || '—']].map(([a,b])=> <div key={String(a)} className="bg-[#0D1912] p-6 rounded-3xl border border-[#1A2E22]"><p className="text-[9px] uppercase tracking-widest text-gray-500">{a}</p><p className="text-2xl font-serif text-white mt-3">{b}</p></div>)}
             </div>
             <div className="grid lg:grid-cols-2 gap-8">
-              <div className="bg-[#0D1912] p-8 rounded-[2rem] border border-[#1A2E22]"><div className="flex justify-between items-center mb-6"><div><p className="text-[10px] text-[#B5F140] uppercase tracking-widest font-bold">Crop recommendation</p><h3 className="text-2xl font-serif mt-2">What should I grow?</h3></div><button onClick={runCropRecommendation} className="bg-[#B5F140] text-[#102015] px-4 py-2 rounded-xl text-xs font-bold">{recommendationLoading?'Analyzing…':'Analyze Field'}</button></div>{cropRecommendation?.candidates?.map((c: any)=><div key={c.name} className="p-4 bg-black/20 rounded-xl border border-white/5 mb-3"><div className="flex justify-between"><span className="font-bold">{c.name}</span><span className="text-[#B5F140]">{c.score}% fit</span></div><p className="text-xs text-gray-400 mt-2">{c.climate} · {c.soil} · {c.duration}</p><p className="text-[11px] text-gray-500 mt-2">{c.reason}</p></div>)}{!cropRecommendation&&<p className="text-sm text-gray-500">Register/select a field, then run the analysis.</p>}</div>
+              <div className="bg-[#0D1912] p-8 rounded-[2rem] border border-[#1A2E22]"><div className="flex justify-between items-center mb-6"><div><p className="text-[10px] text-[#B5F140] uppercase tracking-widest font-bold">Crop recommendation</p><h3 className="text-2xl font-serif mt-2">What should I grow?</h3></div><button onClick={runCropRecommendation} className="bg-[#B5F140] text-[#102015] px-4 py-2 rounded-xl text-xs font-bold">{recommendationLoading?'Analyzing…':'Analyze Field'}</button></div>{cropRecommendation?.candidates?.map((c: any)=><div key={`intelligence-recommendation-${c.name}-${cropRecommendation?.generatedAt || "latest"}`} className="p-4 bg-black/20 rounded-xl border border-white/5 mb-3"><div className="flex justify-between"><span className="font-bold">{c.name}</span><span className="text-[#B5F140]">{c.score}% fit</span></div><p className="text-xs text-gray-400 mt-2">{c.climate} · {c.soil} · {c.duration}</p><p className="text-[11px] text-gray-500 mt-2">{c.reason}</p></div>)}{!cropRecommendation&&<div className="rounded-xl border border-dashed border-[#B5F140]/20 bg-[#B5F140]/5 p-5"><p className="text-sm font-bold text-white">Recommended Crop Engine</p><p className="text-xs text-gray-500 mt-2">Select a registered field and generate a field-specific ranking across the complete crop catalogue. No single Rice/Maize fallback is used.</p><button onClick={runCropRecommendation} disabled={!fields.length || recommendationLoading} className="mt-4 bg-[#B5F140] text-black px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-50">Generate recommendations</button></div>}</div>
               <div className="bg-[#0D1912] p-8 rounded-[2rem] border border-[#1A2E22]"><div className="flex justify-between items-center mb-6"><div><p className="text-[10px] text-[#B5F140] uppercase tracking-widest font-bold">Live field surveillance</p><h3 className="text-2xl font-serif mt-2">What is happening now?</h3></div><button onClick={refreshSurveillance} className="border border-[#B5F140]/40 text-[#B5F140] px-4 py-2 rounded-xl text-xs font-bold">{surveillanceRefreshing?'Refreshing…':'Refresh'}</button></div>{(surveillanceData.length?surveillanceData:fields).map((f,i)=><div key={f.id||i} className="p-4 bg-black/20 rounded-xl border border-white/5 mb-3 cursor-pointer" onClick={()=>setSelectedFieldDetail(f)}><div className="flex justify-between"><span className="font-bold">{f.name}</span><span className="text-xs text-gray-400">{f.location}</span></div><div className="grid grid-cols-3 gap-3 mt-3 text-[10px] text-gray-400"><span>Moisture: {f.moisture||'—'}</span><span>Health: {f.health||'—'}</span><span>Risk: {f.risk||'—'}</span></div></div>)}</div>
             </div>
             {selectedFieldDetail&&<div className="bg-[#0A160F] p-8 rounded-[2rem] border border-[#1A2E22]"><div className="flex justify-between"><h3 className="text-2xl font-serif">{selectedFieldDetail.name} — Field Intelligence</h3><button onClick={()=>setSelectedFieldDetail(null)}><X/></button></div><div className="grid md:grid-cols-4 gap-4 mt-6">{[['Location',selectedFieldDetail.location],['Soil',selectedFieldDetail.soil],['Area',`${selectedFieldDetail.area} acres`],['Crop',selectedFieldDetail.crop||'Not assigned']].map(([a,b])=><div key={String(a)} className="bg-white/5 p-4 rounded-xl"><p className="text-[9px] text-gray-500 uppercase">{a}</p><p className="font-bold mt-2">{b}</p></div>)}</div><p className="text-xs text-gray-500 mt-5">Connect validated weather, soil telemetry, camera or IoT APIs here.</p></div>}
@@ -2773,9 +2891,28 @@ export default function YieldSenseApp() {
                 ))}
               </div>
             </div>
+            <div className="bg-gradient-to-br from-[#0D1912] to-[#09110C] border border-[#B5F140]/15 rounded-[2rem] p-6 md:p-7">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                <div>
+                  <p className="text-[10px] text-[#B5F140] uppercase tracking-[0.2em] font-bold">Crop-specific market intelligence</p>
+                  <h3 className="text-2xl md:text-3xl font-serif mt-2">Mandi Aggregators & Direct Buyers for Every Crop</h3>
+                  <p className="text-xs text-gray-500 mt-2 max-w-3xl">Select any supported crop to see its market type, likely buyer category, quality checkpoints, demand channel and reference price. These are planning references, not live quotes.</p>
+                </div>
+                <button type="button" onClick={()=>setSelectedMarketCrop("All")} className="shrink-0 border border-[#B5F140]/30 text-[#B5F140] px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-[#B5F140]/10">Show all crops</button>
+              </div>
+              {selectedMarketCrop !== "All" && <div className="mt-6 grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+                {(() => { const info:any = getCropMarketIntelligence(selectedMarketCrop); return [
+                  ["Market", info.marketCenter], ["Buyer", info.buyerType], ["Quality", info.quality], ["Reference", info.referencePrice]
+                ].map(([label,value], detailIndex)=><div key={`market-detail-${selectedMarketCrop}-${detailIndex}`} className="bg-black/25 border border-white/5 rounded-xl p-4"><p className="text-[9px] uppercase tracking-widest text-gray-500">{label}</p><p className="text-xs font-bold text-white mt-2 leading-relaxed">{value}</p></div>); })()}
+              </div>}
+              <div className="mt-5 flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                {marketCoverageReport.map((coverage:any, index:number)=><button type="button" key={`market-crop-chip-${coverage.crop}-${index}`} onClick={()=>setSelectedMarketCrop(coverage.crop)} className={`shrink-0 px-3 py-2 rounded-lg text-[10px] font-bold border ${selectedMarketCrop===coverage.crop?'bg-[#B5F140] text-black border-[#B5F140]':'bg-black/20 text-gray-400 border-white/10 hover:text-white hover:border-white/20'}`}>{getCropDisplayName(coverage.crop,lang)}</button>)}
+              </div>
+            </div>
+
             <div className="grid lg:grid-cols-2 gap-8">
-              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Mandi Aggregators</h3>{marketDirectory.filter(x=>(selectedMarketCrop==='All'||x.crop===selectedMarketCrop)&&`${x.crop} ${x.market} ${x.buyer}`.toLowerCase().includes(marketSearch.toLowerCase())).map((x,idx)=><div key={`${x.id || x.market}-${idx}`} className="p-4 border-b border-white/5"><div className="flex justify-between"><b>{getCropDisplayName(x.crop, lang)}</b><span className="text-xs text-gray-400">{x.market}</span></div><p className="text-xs text-gray-500 mt-2">{x.buyer} · {x.region}</p><div className="flex justify-between mt-3"><p className="text-xs text-[#B5F140]">Est. Price: {x.price}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="text-xs font-bold text-white bg-white/10 px-3 py-1 rounded hover:bg-white/20 z-50 relative pointer-events-auto">Contact</button></div></div>)}</div>
-              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Direct Buyer Directory</h3>{buyerDirectory.filter(x=>`${x.crop} ${x.type} ${x.region}`.toLowerCase().includes(marketSearch.toLowerCase())).map((x,idx)=><div key={`${x.id || `${x.crop}-${x.type}`}-${idx}`} className="p-4 border-b border-white/5"><b>{getCropDisplayName(x.crop, lang)}</b><p className="text-xs text-gray-400 mt-1">{x.type} · {x.region}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="mt-3 text-xs text-[#B5F140] font-bold border border-[#B5F140]/30 px-3 py-1.5 rounded-lg hover:bg-[#B5F140]/10 z-50 relative pointer-events-auto">Contact / Inquire →</button></div>)}</div>
+              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Mandi Aggregators</h3>{marketDirectory.filter(x=>(selectedMarketCrop==='All'||x.crop===selectedMarketCrop)&&`${x.crop} ${x.market} ${x.buyer}`.toLowerCase().includes(marketSearch.toLowerCase())).map((x,idx)=><div key={`mandi-record-${x.crop}-${x.id || x.market}-${idx}`} className="p-4 border-b border-white/5"><div className="flex justify-between"><b>{getCropDisplayName(x.crop, lang)}</b><span className="text-xs text-gray-400">{x.market}</span></div><p className="text-xs text-gray-500 mt-2">{x.buyer} · {x.region}</p><div className="flex justify-between mt-3"><p className="text-xs text-[#B5F140]">Est. Price: {x.price}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="text-xs font-bold text-white bg-white/10 px-3 py-1 rounded hover:bg-white/20 z-50 relative pointer-events-auto">Contact</button></div></div>)}</div>
+              <div className="bg-[#0D1912] p-6 rounded-[2rem] border border-[#1A2E22]"><h3 className="text-2xl font-serif mb-5">Direct Buyer Directory</h3>{buyerDirectory.filter(x=>`${x.crop} ${x.type} ${x.region}`.toLowerCase().includes(marketSearch.toLowerCase())).map((x,idx)=><div key={`buyer-record-${x.crop}-${x.id || x.type}-${idx}`} className="p-4 border-b border-white/5"><b>{getCropDisplayName(x.crop, lang)}</b><p className="text-xs text-gray-400 mt-1">{x.type} · {x.region}</p><button onClick={()=>{setInquiryModal({isOpen: true, buyer: x, message: ""}); document.body.style.overflow = "hidden";}} className="mt-3 text-xs text-[#B5F140] font-bold border border-[#B5F140]/30 px-3 py-1.5 rounded-lg hover:bg-[#B5F140]/10 z-50 relative pointer-events-auto">Contact / Inquire →</button></div>)}</div>
             </div>
           </div>
         )}
@@ -3047,9 +3184,28 @@ export default function YieldSenseApp() {
             )}
 
             {businessSection === "knowledge" && (
-              <div className="grid lg:grid-cols-[1.4fr,1fr] gap-6">
-                <div className="grid md:grid-cols-2 gap-4">{educationArticles.map(article=><button key={`article-${article.id}`} onClick={()=>setSelectedArticle(article)} className="text-left bg-[#0D1912] p-6 rounded-3xl border border-[#1A2E22] hover:border-[#B5F140]/30"><div className="flex justify-between"><span className="text-[9px] uppercase tracking-widest text-[#B5F140]">{article.category}</span><span className="text-[9px] text-gray-500">{article.read}</span></div><h3 className="text-xl font-serif mt-3">{article.title}</h3><p className="text-xs text-gray-500 mt-3 leading-relaxed">{article.summary}</p><span className="inline-flex items-center gap-2 text-xs text-[#B5F140] font-bold mt-5">Read guide <ChevronRight size={14}/></span></button>)}</div>
-                <div className="bg-[#0D1912] p-7 rounded-[2rem] border border-[#1A2E22] min-h-[260px]">{selectedArticle?<><p className="text-[9px] uppercase tracking-widest text-[#B5F140]">{selectedArticle.category}</p><h3 className="text-3xl font-serif mt-2">{selectedArticle.title}</h3><p className="text-sm text-gray-400 mt-5 leading-relaxed">{selectedArticle.summary}</p><div className="mt-6 p-4 bg-black/20 rounded-xl border border-white/5"><p className="text-xs text-gray-300 leading-relaxed">Educational content is informational only. Validate crop-specific practices with a qualified local agronomist, soil test and product label before acting.</p></div></>:<p className="text-gray-500">Select a guide to read its farmer-friendly summary.</p>}</div>
+              <div className="space-y-7">
+                <div className="grid lg:grid-cols-[1.05fr,1.45fr] gap-6">
+                  <div className="space-y-4">
+                    {educationArticles.map((article:any, articleIndex:number)=><button key={`education-guide-${article.id}-${articleIndex}`} onClick={()=>setSelectedArticle(article)} className={`w-full text-left bg-[#0D1912] p-6 rounded-3xl border transition-all ${selectedArticle?.id===article.id?"border-[#B5F140]/60 bg-[#B5F140]/5":"border-[#1A2E22] hover:border-[#B5F140]/30"}`}>
+                      <div className="flex justify-between gap-3"><span className="text-[9px] uppercase tracking-widest text-[#B5F140]">{article.category}</span><span className="text-[9px] text-gray-500">{article.read}</span></div>
+                      <h3 className="text-xl font-serif mt-3">{article.title}</h3><p className="text-xs text-gray-500 mt-3 leading-relaxed">{article.summary}</p>
+                      <span className="inline-flex items-center gap-2 text-xs text-[#B5F140] font-bold mt-5">{getEducationText(lang,"read")} <ChevronRight size={14}/></span>
+                    </button>)}
+                  </div>
+                  <div className="bg-[#0D1912] p-7 md:p-8 rounded-[2rem] border border-[#1A2E22] min-h-[620px]">
+                    {selectedArticle ? <div className="space-y-7">
+                      <div className="flex flex-wrap justify-between gap-4 items-start"><div><p className="text-[9px] uppercase tracking-[0.2em] text-[#B5F140] font-bold">{selectedArticle.category} · {selectedArticle.read}</p><h3 className="text-3xl md:text-4xl font-serif mt-2">{selectedArticle.title}</h3></div><span className="px-3 py-1.5 rounded-full bg-[#B5F140]/10 border border-[#B5F140]/20 text-[9px] uppercase tracking-widest text-[#B5F140]">{getEducationText(lang,"complete")}</span></div>
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-5"><p className="text-[9px] uppercase tracking-widest text-gray-500">{getEducationText(lang,"purpose")}</p><p className="text-sm text-gray-300 leading-relaxed mt-2">{selectedArticle.purpose}</p></div>
+                      <section><h4 className="text-lg font-serif text-white">{getEducationText(lang,"learn")}</h4><div className="grid md:grid-cols-2 gap-3 mt-3">{selectedArticle.whatYouLearn.map((item:string,idx:number)=><div key={`guide-learn-${selectedArticle.id}-${idx}`} className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><span className="w-6 h-6 shrink-0 rounded-full bg-[#B5F140]/10 text-[#B5F140] flex items-center justify-center text-[10px] font-bold">{idx+1}</span><p className="text-xs text-gray-400 leading-relaxed">{item}</p></div>)}</div></section>
+                      <section><h4 className="text-lg font-serif text-white">{getEducationText(lang,"steps")}</h4><div className="space-y-3 mt-3">{selectedArticle.steps.map((step:string,idx:number)=><div key={`guide-step-${selectedArticle.id}-${idx}`} className="flex gap-4 p-4 rounded-xl bg-black/20 border border-white/5"><div className="w-8 h-8 shrink-0 rounded-xl bg-[#B5F140] text-black flex items-center justify-center text-xs font-black">{idx+1}</div><p className="text-xs md:text-sm text-gray-300 leading-relaxed">{step}</p></div>)}</div></section>
+                      <div className="grid lg:grid-cols-2 gap-5"><section className="bg-[#07110B] border border-[#1A2E22] rounded-2xl p-5"><h4 className="text-lg font-serif">{getEducationText(lang,"checklist")}</h4><div className="space-y-2 mt-4">{selectedArticle.checklist.map((item:string,idx:number)=><label key={`guide-check-${selectedArticle.id}-${idx}`} className="flex gap-3 items-center text-xs text-gray-300"><input type="checkbox" className="accent-[#B5F140] w-4 h-4"/><span>{item}</span></label>)}</div></section><section className="bg-[#07110B] border border-red-500/10 rounded-2xl p-5"><h4 className="text-lg font-serif">{getEducationText(lang,"avoid")}</h4><div className="space-y-3 mt-4">{selectedArticle.avoid.map((item:string,idx:number)=><div key={`guide-avoid-${selectedArticle.id}-${idx}`} className="flex gap-3"><AlertCircle size={15} className="text-orange-300 shrink-0 mt-0.5"/><p className="text-xs text-gray-400 leading-relaxed">{item}</p></div>)}</div></section></div>
+                      <div className="bg-[#B5F140]/5 border border-[#B5F140]/20 rounded-2xl p-5"><p className="text-[9px] uppercase tracking-widest text-[#B5F140] font-bold">{getEducationText(lang,"action")}</p><p className="text-sm text-gray-200 leading-relaxed mt-2">{selectedArticle.action}</p><button onClick={()=>{setActiveTab("planner");addHistory("education",`Guide action opened: ${selectedArticle.title}`);}} className="mt-4 bg-[#B5F140] text-black px-4 py-2.5 rounded-xl text-xs font-bold">{getEducationText(lang,"next")} →</button></div>
+                      <section className="bg-black/20 border border-white/5 rounded-2xl p-5"><h4 className="text-lg font-serif">{getEducationText(lang,"quiz")}</h4>{selectedArticle.quiz.map((quiz:any,idx:number)=><div key={`guide-quiz-${selectedArticle.id}-${idx}`} className="mt-4"><p className="text-sm text-gray-300">{quiz.q}</p><div className="grid gap-2 mt-3">{quiz.options.map((option:string,optionIndex:number)=><button key={`guide-option-${selectedArticle.id}-${idx}-${optionIndex}`} onClick={()=>showToast(optionIndex===quiz.answer?"Correct — keep using field evidence to verify decisions.":"Not quite. Review the guide steps and field data before acting.")} className="text-left p-3 rounded-xl bg-white/5 border border-white/5 hover:border-[#B5F140]/30 text-xs text-gray-300">{String.fromCharCode(65+optionIndex)}. {option}</button>)}</div></div>)}</section>
+                      <div className="p-4 rounded-xl bg-black/20 border border-white/5"><p className="text-xs text-gray-400 leading-relaxed">{getEducationText(lang,"verify")}</p></div>
+                    </div> : <div className="min-h-[560px] flex items-center justify-center text-center"><div><BookOpen size={42} className="mx-auto text-[#B5F140]/60"/><h3 className="text-2xl font-serif mt-4">Choose a farmer guide</h3><p className="text-sm text-gray-500 mt-2 max-w-md">Select a guide on the left to get a complete explanation, practical steps, field checklist, mistakes to avoid and a next action inside YieldSense AI.</p></div></div>}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -3408,3 +3564,56 @@ export default function YieldSenseApp() {
 // 15. No live market, buyer, payment or logistics claim is invented by this page.
 // ============================================================================
 
+
+
+// ============================================================================
+// YIELDSENSE AI — 2026.10 ALL-CROP / LANGUAGE / RECOMMENDATION REGRESSION PACK
+// ============================================================================
+// Regression 01: Farm Planner recommendation is generated from the complete
+// cropCatalog and never uses a Rice profile as an unknown-crop fallback.
+// Regression 02: recommendation cards carry crop-specific duration, climate,
+// soil, nutrient, water and risk information from the canonical crop profile.
+// Regression 03: recommendation cards also expose planning-only yield/cost/
+// revenue/profit estimates where a reference market price exists.
+// Regression 04: estimated financial values are never presented as guarantees.
+// Regression 05: the selected recommendation can open the crop-specific Mandi
+// and Direct Buyer records without losing the current crop selection.
+// Regression 06: every crop in cropCatalog receives market intelligence records.
+// Regression 07: market intelligence is explicitly reference data until a live
+// verified market provider is connected; no hard-coded value is called live.
+// Regression 08: Mandi records have crop-specific market category and region.
+// Regression 09: Direct Buyer records are generated for every supported crop.
+// Regression 10: the market coverage selector exposes every supported crop.
+// Regression 11: market list keys include crop, identity and occurrence index.
+// Regression 12: buyer list keys include crop, identity and occurrence index.
+// Regression 13: recommendation list keys include crop and occurrence index.
+// Regression 14: architecture now communicates the actual decision flow rather
+// than only showing technology names; it connects farmer input to action.
+// Regression 15: no existing dashboard, forecast, planner, vision, field,
+// marketplace, cart, checkout, expert, profile, history or business tab is removed.
+// Regression 16: Gemini Vision remains behind /api/vision and no key is exposed.
+// Regression 17: Expert consultation remains behind /api/expert and should be
+// backed by the App Router endpoint supplied with this delivery.
+// Regression 18: language switching updates document language, Google Translate,
+// placeholders and the native crop/planner/business dictionaries together.
+// Regression 19: translation retries are bounded to prevent HMR/DOM loops.
+// Regression 20: dynamic navigation triggers additional translation passes so
+// newly mounted sections are not permanently left in English.
+// Regression 21: English restores the original page instead of applying a stale
+// translated DOM from a previous language.
+// Regression 22: language names in the selector remain readable and are not
+// recursively translated into another language.
+// Regression 23: crop names continue to use the canonical cropLanguageNames map.
+// Regression 24: planner stage names continue to use plannerLanguage.
+// Regression 25: business hub labels continue to use businessTranslations.
+// Regression 26: placeholder translations remain explicit for form controls.
+// Regression 27: unsupported external integrations are clearly marked as demo,
+// reference, offline or provider-required instead of being falsely claimed live.
+// Regression 28: market and buyer details can be expanded by replacing the
+// reference adapter without changing the farmer-facing component contract.
+// Regression 29: all newly added maps use deterministic React keys.
+// Regression 30: all-crop coverage is derived from the same cropCatalog that
+// powers the model registry, planner and recommendation engine.
+// ============================================================================
+// End of all-crop / language / recommendation regression pack.
+// ============================================================================
