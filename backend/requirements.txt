@@ -8,3 +8,4 @@ psycopg[binary]
 sqlalchemy
 passlib[bcrypt]
 PyJWT
+python-dotenv
