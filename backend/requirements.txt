@@ -7,3 +7,4 @@ python-multipart
 psycopg[binary]
 sqlalchemy
 passlib[bcrypt]
+PyJWT
